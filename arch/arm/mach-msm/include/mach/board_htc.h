@@ -33,6 +33,16 @@ struct msm_pmem_setting{
 	resource_size_t ram_console_size;
 };
 
+#if defined(CONFIG_ARCH_MSM8X60)
+struct msm_mem_settings {
+	/* key attributes for identifying the setting. */
+	unsigned mem_size_mb;
+
+	/* native meminfo data structure */
+	struct meminfo mem_info;
+};
+#endif
+
 enum {
 	MSM_SERIAL_UART1	= 0,
 	MSM_SERIAL_UART2,
@@ -55,6 +65,10 @@ struct mmc_platform_data;
 int __init msm_add_sdcc_devices(unsigned int controller, struct mmc_platform_data *plat);
 int __init msm_add_serial_devices(unsigned uart);
 
+#define SHIP_BUILD	0
+#define MFG_BUILD	1
+#define ENG_BUILD	2
+
 #if defined(CONFIG_USB_FUNCTION_MSM_HSUSB)
 /* START: add USB connected notify function */
 struct t_usb_status_notifier{
@@ -72,6 +86,7 @@ int __init parse_tag_smi(const struct tag *tags);
 int __init parse_tag_hwid(const struct tag * tags);
 int __init parse_tag_skuid(const struct tag * tags);
 int parse_tag_engineerid(const struct tag * tags);
+int __init parse_tag_memsize(const struct tag *tags);
 
 char *board_serialno(void);
 

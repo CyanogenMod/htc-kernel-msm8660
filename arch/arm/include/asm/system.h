@@ -73,6 +73,11 @@ extern unsigned int system_serial_low;
 extern unsigned int system_serial_high;
 extern unsigned int mem_fclk_21285;
 
+#ifdef CONFIG_HTC_DEVICE
+extern char microp_ver[4];
+extern unsigned int als_kadc;
+#endif
+
 struct pt_regs;
 
 void die(const char *msg, struct pt_regs *regs, int err);

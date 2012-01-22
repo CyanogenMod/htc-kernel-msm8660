@@ -328,4 +328,9 @@ obj-$(CONFIG_ARCH_MSM7X30) += board-msm7x30-regulator.o
 obj-$(CONFIG_ARCH_MSM7X27A) += board-msm7x27a-regulator.o
 endif
 
+# HTC stuffs
+ifdef CONFIG_HTC_DEVICE
+obj-y += devices_htc.o htc_wifi_nvs.o htc_awb_cal.o
+endif
+
 obj-$(CONFIG_ARCH_MSM8960) += mdm2.o mdm_common.o
