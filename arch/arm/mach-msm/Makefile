@@ -328,6 +328,8 @@ endif
 # HTC stuffs
 ifdef CONFIG_HTC_DEVICE
 obj-y += devices_htc.o htc_wifi_nvs.o htc_awb_cal.o
+obj-$(CONFIG_HTC_BATT_CORE) += htc_battery_core.o
+obj-$(CONFIG_HTC_BATT8x60) += htc_battery_8x60.o
 endif
 
 obj-$(CONFIG_ARCH_MSM8960) += mdm2.o mdm_common.o
