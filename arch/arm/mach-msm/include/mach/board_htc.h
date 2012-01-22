@@ -54,7 +54,6 @@ enum {
 	MSM_SERIAL_NUM,
 };
 
-
 /* common init routines for use by arch/arm/mach-msm/board-*.c */
 
 void __init msm_add_usb_devices(void (*phy_reset) (void));
@@ -69,8 +68,9 @@ int __init msm_add_serial_devices(unsigned uart);
 #define MFG_BUILD	1
 #define ENG_BUILD	2
 
-#if defined(CONFIG_USB_FUNCTION_MSM_HSUSB)
-/* START: add USB connected notify function */
+#if defined(CONFIG_USB_FUNCTION_MSM_HSUSB) \
+	|| defined(CONFIG_USB_MSM_72K) || defined(CONFIG_USB_MSM_72K_MODULE)
+
 struct t_usb_status_notifier{
 	struct list_head notifier_link;
 	const char *name;
@@ -78,7 +78,6 @@ struct t_usb_status_notifier{
 };
 	int usb_register_notifier(struct t_usb_status_notifier *);
 	static LIST_HEAD(g_lh_usb_notifier_list);
-/* END: add USB connected notify function */
 #endif
 
 int __init board_mfg_mode(void);
