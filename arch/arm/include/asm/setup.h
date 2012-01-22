@@ -126,6 +126,22 @@ struct tag_cmdline {
 	char	cmdline[1];	/* this is the minimum size */
 };
 
+#ifdef CONFIG_HTC_DEVICE
+/* Microp version */
+#define ATAG_MICROP_VERSION   0x5441000a
+
+struct tag_microp_version {
+	char ver[4];
+};
+
+/* Light sensor calibration value */
+#define ATAG_ALS	0x5441001b
+
+struct tag_als_kadc {
+	__u32 kadc;
+};
+#endif
+
 /* acorn RiscPC specific information */
 #define ATAG_ACORN	0x41000101
 
@@ -153,6 +169,10 @@ struct tag {
 		struct tag_initrd	initrd;
 		struct tag_serialnr	serialnr;
 		struct tag_revision	revision;
+#ifdef CONFIG_HTC_DEVICE
+		struct tag_microp_version	microp_version;
+		struct tag_als_kadc 	als_kadc;
+#endif
 		struct tag_videolfb	videolfb;
 		struct tag_cmdline	cmdline;
 
