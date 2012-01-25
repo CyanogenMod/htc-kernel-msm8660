@@ -44,7 +44,12 @@ obj-$(CONFIG_HOTPLUG_CPU) += hotplug.o
 obj-$(CONFIG_MSM_CPU_AVS) += avs.o
 obj-$(CONFIG_MSM_AVS_HW) += avs_hw.o
 obj-$(CONFIG_CPU_V6) += idle-v6.o
+
+ifdef CONFIG_HTC_DEVICE
+obj-$(CONFIG_CPU_V7) += idle-v7-htc.o
+else
 obj-$(CONFIG_CPU_V7) += idle-v7.o
+endif
 obj-$(CONFIG_MSM_JTAG) += jtag.o
 
 msm-etm-objs := etm.o
@@ -212,6 +217,8 @@ obj-$(CONFIG_MACH_MSM8X60_FLUID) += board-msm8x60.o
 obj-$(CONFIG_MACH_MSM8X60_DRAGON) += board-msm8x60.o
 obj-$(CONFIG_MACH_TYPE_MSM8X60_FUSION) += board-msm8x60.o mdm.o
 obj-$(CONFIG_MACH_MSM8X60_FUSN_FFA) += board-msm8x60.o mdm.o
+obj-$(CONFIG_MACH_SHOOTER) += board-shooter.o
+obj-$(CONFIG_MACH_SHOOTER_U) += board-shooter.o
 obj-$(CONFIG_TROUT_H2W) += board-trout-h2w.o
 obj-$(CONFIG_TROUT_BATTCHG) += htc_battery.o
 obj-$(CONFIG_TROUT_PWRSINK) += htc_pwrsink.o
