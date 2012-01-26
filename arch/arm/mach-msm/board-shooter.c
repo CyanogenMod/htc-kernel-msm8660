@@ -696,6 +696,36 @@ static struct platform_device *early_regulators[] __initdata = {
 	&rpm_regulator_early_device,
 };
 
+static struct platform_device *early_devices[] __initdata = {
+#ifdef CONFIG_MSM_BUS_SCALING
+	&msm_bus_apps_fabric,
+	&msm_bus_sys_fabric,
+	&msm_bus_mm_fabric,
+	&msm_bus_sys_fpb,
+	&msm_bus_cpss_fpb,
+#endif
+	&msm_device_dmov_adm0,
+	&msm_device_dmov_adm1,
+};
+
+static struct platform_device *devices[] __initdata = {
+	&ram_console_device,
+	&msm_device_smd,
+#ifdef CONFIG_I2C_QUP
+	&msm_gsbi4_qup_i2c_device,
+	&msm_gsbi5_qup_i2c_device,
+	&msm_gsbi7_qup_i2c_device,
+	&msm_gsbi10_qup_i2c_device,
+#endif
+#if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)
+	&msm_gsbi1_qup_spi_device,
+	&msm_gsbi2_qup_spi_device,
+#endif
+	&rpm_regulator_device,
+	&msm8660_rpm_device,
+	&msm8660_device_watchdog,
+};
+
 #ifdef CONFIG_I2C_QUP
 
 static uint32_t gsbi4_gpio_table[] = {
@@ -721,7 +751,7 @@ static uint32_t gsbi10_gpio_table[] = {
 
 static void gsbi_qup_i2c_gpio_config(int adap_id, int config_type)
 {
-	printk(KERN_INFO "%s(): adap_id = %d, config_type = %d \n", __func__,adap_id,config_type);
+	printk(KERN_INFO "ZOMFG %s(): adap_id = %d, config_type = %d \n", __func__,adap_id,config_type);
 
 	if ((adap_id == MSM_GSBI4_QUP_I2C_BUS_ID) && (config_type == 1)) {
 		gpio_tlmm_config(gsbi4_gpio_table[0], GPIO_CFG_ENABLE);
@@ -841,12 +871,6 @@ static void __init msm8x60_init_buses(void)
 
 }
 
-static struct platform_device *devices[] __initdata = {
-	&ram_console_device,
-	&rpm_regulator_device,
-
-};
-
 static void __init msm8x60_map_io(void)
 {
 	msm_shared_ram_phys = MSM_SHARED_RAM_PHYS;
@@ -895,8 +919,17 @@ static void __init msm8x60_init(void)
 	 * to get the platform data for fabrics.
 	 */
 	msm8x60_init_buses();
+	platform_add_devices(early_devices, ARRAY_SIZE(early_devices));
+
+	acpuclk_init(&acpuclk_8x60_soc_data);
+
+	msm8x60_init_gpiomux(msm8x60_htc_gpiomux_cfgs);
+	
+	platform_add_devices(msm_footswitch_devices,
+					     msm_num_footswitch_devices);
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
+	pr_err("NEXT\n");
 }
 
 static void __init shooter_fixup(struct machine_desc *desc, struct tag *tags,
