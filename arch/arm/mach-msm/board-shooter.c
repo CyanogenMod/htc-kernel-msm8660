@@ -1,3 +1,4 @@
+#include <linux/gpio.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 #include <linux/mfd/pmic8058.h>
@@ -14,6 +15,7 @@
 
 #include <mach/board.h>
 #include <mach/board_htc.h>
+#include <mach/gpiomux.h>
 #include <mach/msm_iomap.h>
 #include <mach/msm_xo.h>
 #include <mach/restart.h>
@@ -23,6 +25,7 @@
 
 #include "acpuclock.h"
 #include "devices.h"
+#include "gpiomux-8x60.h"
 #include "rpm_resources.h"
 #include "spm.h"
 #include "timer.h"
@@ -691,6 +694,145 @@ static struct platform_device *early_regulators[] __initdata = {
 	&rpm_regulator_early_device,
 };
 
+#ifdef CONFIG_I2C_QUP
+
+static uint32_t gsbi4_gpio_table[] = {
+	GPIO_CFG(SHOOTER_CAM_I2C_SDA, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+	GPIO_CFG(SHOOTER_CAM_I2C_SCL, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+};
+
+static uint32_t gsbi5_gpio_table[] = {
+	GPIO_CFG(SHOOTER_TP_I2C_SDA, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+	GPIO_CFG(SHOOTER_TP_I2C_SCL, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+};
+
+static uint32_t gsbi7_gpio_table[] = {
+	GPIO_CFG(SHOOTER_GENERAL_I2C_SDA, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+	GPIO_CFG(SHOOTER_GENERAL_I2C_SCL, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+};
+
+static uint32_t gsbi10_gpio_table[] = {
+	GPIO_CFG(SHOOTER_SENSOR_I2C_SDA, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIOMUX_DRV_8MA),
+	GPIO_CFG(SHOOTER_SENSOR_I2C_SCL, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIOMUX_DRV_8MA),
+};
+
+
+static void gsbi_qup_i2c_gpio_config(int adap_id, int config_type)
+{
+	printk(KERN_INFO "%s(): adap_id = %d, config_type = %d \n", __func__,adap_id,config_type);
+
+	if ((adap_id == MSM_GSBI4_QUP_I2C_BUS_ID) && (config_type == 1)) {
+		gpio_tlmm_config(gsbi4_gpio_table[0], GPIO_CFG_ENABLE);
+		gpio_tlmm_config(gsbi4_gpio_table[1], GPIO_CFG_ENABLE);
+	}
+
+	if ((adap_id == MSM_GSBI4_QUP_I2C_BUS_ID) && (config_type == 0)) {
+		gpio_tlmm_config(gsbi4_gpio_table[0], GPIO_CFG_DISABLE);
+		gpio_tlmm_config(gsbi4_gpio_table[1], GPIO_CFG_DISABLE);
+	}
+
+	if ((adap_id == MSM_GSBI5_QUP_I2C_BUS_ID) && (config_type == 1)) {
+		gpio_tlmm_config(gsbi5_gpio_table[0], GPIO_CFG_ENABLE);
+		gpio_tlmm_config(gsbi5_gpio_table[1], GPIO_CFG_ENABLE);
+	}
+
+	if ((adap_id == MSM_GSBI5_QUP_I2C_BUS_ID) && (config_type == 0)) {
+		gpio_tlmm_config(gsbi5_gpio_table[0], GPIO_CFG_DISABLE);
+		gpio_tlmm_config(gsbi5_gpio_table[1], GPIO_CFG_DISABLE);
+	}
+
+	if ((adap_id == MSM_GSBI7_QUP_I2C_BUS_ID) && (config_type == 1)) {
+		gpio_tlmm_config(gsbi7_gpio_table[0], GPIO_CFG_ENABLE);
+		gpio_tlmm_config(gsbi7_gpio_table[1], GPIO_CFG_ENABLE);
+	}
+
+	if ((adap_id == MSM_GSBI7_QUP_I2C_BUS_ID) && (config_type == 0)) {
+		gpio_tlmm_config(gsbi7_gpio_table[0], GPIO_CFG_DISABLE);
+		gpio_tlmm_config(gsbi7_gpio_table[1], GPIO_CFG_DISABLE);
+	}
+
+	if ((adap_id == MSM_GSBI10_QUP_I2C_BUS_ID) && (config_type == 1)) {
+		gpio_tlmm_config(gsbi10_gpio_table[0], GPIO_CFG_ENABLE);
+		gpio_tlmm_config(gsbi10_gpio_table[1], GPIO_CFG_ENABLE);
+	}
+
+	if ((adap_id == MSM_GSBI10_QUP_I2C_BUS_ID) && (config_type == 0)) {
+		gpio_tlmm_config(gsbi10_gpio_table[0], GPIO_CFG_DISABLE);
+		gpio_tlmm_config(gsbi10_gpio_table[1], GPIO_CFG_DISABLE);
+	}
+
+}
+
+static struct msm_i2c_platform_data msm_gsbi4_qup_i2c_pdata = {
+	.clk_freq = 384000,
+	.src_clk_rate = 24000000,
+	.msm_i2c_config_gpio = gsbi_qup_i2c_gpio_config,
+};
+
+static struct msm_i2c_platform_data msm_gsbi5_qup_i2c_pdata = {
+	.clk_freq = 100000,
+	.src_clk_rate = 24000000,
+	.msm_i2c_config_gpio = gsbi_qup_i2c_gpio_config,
+};
+
+static struct msm_i2c_platform_data msm_gsbi7_qup_i2c_pdata = {
+	.clk_freq = 100000,
+	.src_clk_rate = 24000000,
+	.msm_i2c_config_gpio = gsbi_qup_i2c_gpio_config,
+};
+
+
+static struct msm_i2c_platform_data msm_gsbi10_qup_i2c_pdata = {
+	.clk_freq = 384000,
+	.src_clk_rate = 24000000,
+	.msm_i2c_config_gpio = gsbi_qup_i2c_gpio_config,
+};
+
+#endif
+
+#if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)
+static struct msm_spi_platform_data msm_gsbi1_qup_spi_pdata = {
+	.max_clock_speed = 10800000,
+};
+
+static struct msm_spi_platform_data msm_gsbi2_qup_spi_pdata = {
+	.max_clock_speed = 15060000,
+};
+
+#endif
+
+static void __init msm8x60_init_buses(void)
+{
+#ifdef CONFIG_I2C_QUP
+	msm_gsbi4_qup_i2c_device.dev.platform_data = &msm_gsbi4_qup_i2c_pdata;
+	msm_gsbi5_qup_i2c_device.dev.platform_data = &msm_gsbi5_qup_i2c_pdata;
+	msm_gsbi7_qup_i2c_device.dev.platform_data = &msm_gsbi7_qup_i2c_pdata;
+	msm_gsbi10_qup_i2c_device.dev.platform_data = &msm_gsbi10_qup_i2c_pdata;
+#endif
+#if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)
+	msm_gsbi1_qup_spi_device.dev.platform_data = &msm_gsbi1_qup_spi_pdata;
+	msm_gsbi2_qup_spi_device.dev.platform_data = &msm_gsbi2_qup_spi_pdata;
+#endif
+#ifdef CONFIG_MSM_BUS_SCALING
+
+	/* RPM calls are only enabled on V2 */
+	if (SOCINFO_VERSION_MAJOR(socinfo_get_version()) == 2) {
+		msm_bus_apps_fabric_pdata.rpm_enabled = 1;
+		msm_bus_sys_fabric_pdata.rpm_enabled = 1;
+		msm_bus_mm_fabric_pdata.rpm_enabled = 1;
+		msm_bus_sys_fpb_pdata.rpm_enabled = 1;
+		msm_bus_cpss_fpb_pdata.rpm_enabled = 1;
+	}
+
+	msm_bus_apps_fabric.dev.platform_data = &msm_bus_apps_fabric_pdata;
+	msm_bus_sys_fabric.dev.platform_data = &msm_bus_sys_fabric_pdata;
+	msm_bus_mm_fabric.dev.platform_data = &msm_bus_mm_fabric_pdata;
+	msm_bus_sys_fpb.dev.platform_data = &msm_bus_sys_fpb_pdata;
+	msm_bus_cpss_fpb.dev.platform_data = &msm_bus_cpss_fpb_pdata;
+#endif
+
+}
+
 static struct platform_device *devices[] __initdata = {
 	&ram_console_device,
 	&rpm_regulator_device,
@@ -740,6 +882,11 @@ static void __init msm8x60_init(void)
 	platform_add_devices(early_regulators, ARRAY_SIZE(early_regulators));
 
 	msm_clock_init(&msm8x60_clock_init_data);
+
+	/* Buses need to be initialized before early-device registration
+	 * to get the platform data for fabrics.
+	 */
+	msm8x60_init_buses();
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 }
