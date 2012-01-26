@@ -19,6 +19,8 @@
 #include "timer.h"
 #include "board-shooter.h"
 
+unsigned engineerid, mem_size_mb;
+
 #define MSM_SHARED_RAM_PHYS		0x40000000
 #define MSM_RAM_CONSOLE_BASE		0x40300000
 #define MSM_RAM_CONSOLE_SIZE		(SZ_1M - SZ_128K)
@@ -59,9 +61,14 @@ static void __init msm8x60_init(void)
 static void __init shooter_fixup(struct machine_desc *desc, struct tag *tags,
 				char **cmdline, struct meminfo *mi)
 {
+	mem_size_mb = parse_tag_memsize((const struct tag *)tags);
+	printk(KERN_DEBUG "%s: mem_size_mb=%u\n", __func__, mem_size_mb);
+	engineerid = parse_tag_engineerid(tags);
 	mi->nr_banks = 1;
-	mi->bank[0].start = CONFIG_PHYS_OFFSET;
-	mi->bank[0].size = 0x33800000;
+	mi->bank[0].start = CONFIG_PHYS_OFFSET; //0x48000000
+	mi->bank[0].size = 0x23800000;
+	if (mem_size_mb == 1024)
+		mi->bank[0].size += 0x10000000;
 }
 
 MACHINE_START(SHOOTER, "HTC Evo 3D CDMA")
