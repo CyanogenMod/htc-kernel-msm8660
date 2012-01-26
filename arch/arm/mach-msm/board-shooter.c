@@ -16,7 +16,9 @@
 #include <mach/board.h>
 #include <mach/board_htc.h>
 #include <mach/gpiomux.h>
+#include <mach/msm_bus_board.h>
 #include <mach/msm_iomap.h>
+#include <mach/msm_spi.h>
 #include <mach/msm_xo.h>
 #include <mach/restart.h>
 #include <mach/rpm.h>
