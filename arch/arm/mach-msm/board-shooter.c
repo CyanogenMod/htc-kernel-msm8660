@@ -21,6 +21,8 @@
 #include <mach/rpm-regulator.h>
 #include <mach/socinfo.h>
 
+#include "acpuclock.h"
+#include "devices.h"
 #include "rpm_resources.h"
 #include "spm.h"
 #include "timer.h"
@@ -736,6 +738,8 @@ static void __init msm8x60_init(void)
 
 	/* Initialize regulators needed for clock_init. */
 	platform_add_devices(early_regulators, ARRAY_SIZE(early_regulators));
+
+	msm_clock_init(&msm8x60_clock_init_data);
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 }
