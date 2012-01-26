@@ -1103,6 +1103,47 @@ struct platform_device msm_gsbi2_qup_spi_device = {
         .resource   = gsbi2_qup_spi_resources,
 };
 
+static struct resource gsbi3_qup_spi_resources[] = {
+        {
+                .name   = "spi_base",
+                .start  = MSM_GSBI3_QUP_PHYS,
+                .end    = MSM_GSBI3_QUP_PHYS + SZ_4K - 1,
+                .flags  = IORESOURCE_MEM,
+        },
+        {
+                .name   = "gsbi_base",
+                .start  = MSM_GSBI3_PHYS,
+                .end    = MSM_GSBI3_PHYS + 4 - 1,
+                .flags  = IORESOURCE_MEM,
+        },
+        {
+                .name   = "spi_irq_in",
+                .start  = GSBI3_QUP_IRQ,
+                .end    = GSBI3_QUP_IRQ,
+                .flags  = IORESOURCE_IRQ,
+        },
+        {
+                .name   = "spidm_channels",
+                .start  = 5,
+                .end    = 6,
+                .flags  = IORESOURCE_DMA,
+        },
+        {
+                .name   = "spidm_crci",
+                .start  = 8,
+                .end    = 7,
+                .flags  = IORESOURCE_DMA,
+        },
+};
+
+/* Use GSBI3 QUP for SPI-2 */
+struct platform_device msm_gsbi3_qup_spi_device = {
+        .name           = "spi_qsd",
+	.id             = 2,
+        .num_resources  = ARRAY_SIZE(gsbi3_qup_spi_resources),
+        .resource       = gsbi3_qup_spi_resources,
+};
+
 static struct resource gsbi10_qup_spi_resources[] = {
 	{
 		.name	= "spi_base",
@@ -1145,7 +1186,7 @@ static struct resource gsbi10_qup_spi_resources[] = {
 /* Use GSBI10 QUP for SPI-1 */
 struct platform_device msm_gsbi10_qup_spi_device = {
 	.name		= "spi_qsd",
-	.id		= 1,
+	.id		= 3,
 	.num_resources	= ARRAY_SIZE(gsbi10_qup_spi_resources),
 	.resource	= gsbi10_qup_spi_resources,
 };
