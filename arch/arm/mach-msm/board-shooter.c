@@ -801,6 +801,9 @@ static struct msm_spi_platform_data msm_gsbi2_qup_spi_pdata = {
 	.max_clock_speed = 15060000,
 };
 
+static struct msm_spi_platform_data msm_gsbi3_qup_spi_pdata = {
+	.max_clock_speed = 15060000,
+};
 #endif
 
 static void __init msm8x60_init_buses(void)
@@ -813,7 +816,10 @@ static void __init msm8x60_init_buses(void)
 #endif
 #if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)
 	msm_gsbi1_qup_spi_device.dev.platform_data = &msm_gsbi1_qup_spi_pdata;
-	msm_gsbi2_qup_spi_device.dev.platform_data = &msm_gsbi2_qup_spi_pdata;
+	if (machine_is_shooter())
+		msm_gsbi2_qup_spi_device.dev.platform_data = &msm_gsbi2_qup_spi_pdata;
+	else
+		msm_gsbi3_qup_spi_device.dev.platform_data = &msm_gsbi3_qup_spi_pdata;
 #endif
 #ifdef CONFIG_MSM_BUS_SCALING
 

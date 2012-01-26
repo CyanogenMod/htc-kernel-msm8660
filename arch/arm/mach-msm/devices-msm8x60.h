@@ -47,6 +47,7 @@ extern struct platform_device msm_pcm_hostless;
 #ifdef CONFIG_SPI_QUP
 extern struct platform_device msm_gsbi1_qup_spi_device;
 extern struct platform_device msm_gsbi2_qup_spi_device;
+extern struct platform_device msm_gsbi3_qup_spi_device;
 extern struct platform_device msm_gsbi10_qup_spi_device;
 #endif
 
