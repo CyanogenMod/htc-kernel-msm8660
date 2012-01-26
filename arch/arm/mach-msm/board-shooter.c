@@ -22,6 +22,7 @@
 #include <mach/socinfo.h>
 
 #include "rpm_resources.h"
+#include "spm.h"
 #include "timer.h"
 #include "board-shooter.h"
 
@@ -130,6 +131,122 @@ static struct msm_rpmrs_platform_data msm_rpmrs_data __initdata = {
 	},
 };
 
+static struct msm_spm_platform_data msm_spm_data_v1[] __initdata = {
+	[0] = {
+		.reg_base_addr = MSM_SAW0_BASE,
+
+#ifdef CONFIG_MSM_AVS_HW
+		.reg_init_values[MSM_SPM_REG_SAW_AVS_CTL] = 0x586020FF,
+#endif
+		.reg_init_values[MSM_SPM_REG_SAW_CFG] = 0x0F,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_CTL] = 0x68,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_SLP_TMR_DLY] = 0xFFFFFFFF,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_WAKE_TMR_DLY] = 0xFFFFFFFF,
+
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_CLK_EN] = 0x01,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_HSFS_PRECLMP_EN] = 0x07,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_HSFS_POSTCLMP_EN] = 0x00,
+
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_CLMP_EN] = 0x01,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_RST_EN] = 0x00,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_MPM_CFG] = 0x00,
+
+		.awake_vlevel = 0x94,
+		.retention_vlevel = 0x81,
+		.collapse_vlevel = 0x20,
+		.retention_mid_vlevel = 0x94,
+		.collapse_mid_vlevel = 0x8C,
+
+		.vctl_timeout_us = 50,
+	},
+
+	[1] = {
+		.reg_base_addr = MSM_SAW1_BASE,
+
+#ifdef CONFIG_MSM_AVS_HW
+		.reg_init_values[MSM_SPM_REG_SAW_AVS_CTL] = 0x586020FF,
+#endif
+		.reg_init_values[MSM_SPM_REG_SAW_CFG] = 0x0F,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_CTL] = 0x68,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_SLP_TMR_DLY] = 0xFFFFFFFF,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_WAKE_TMR_DLY] = 0xFFFFFFFF,
+
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_CLK_EN] = 0x13,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_HSFS_PRECLMP_EN] = 0x07,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_HSFS_POSTCLMP_EN] = 0x00,
+
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_CLMP_EN] = 0x01,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_RST_EN] = 0x00,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_MPM_CFG] = 0x00,
+
+		.awake_vlevel = 0x94,
+		.retention_vlevel = 0x81,
+		.collapse_vlevel = 0x20,
+		.retention_mid_vlevel = 0x94,
+		.collapse_mid_vlevel = 0x8C,
+
+		.vctl_timeout_us = 50,
+	},
+};
+
+static struct msm_spm_platform_data msm_spm_data[] __initdata = {
+	[0] = {
+		.reg_base_addr = MSM_SAW0_BASE,
+
+#ifdef CONFIG_MSM_AVS_HW
+		.reg_init_values[MSM_SPM_REG_SAW_AVS_CTL] = 0x586020FF,
+#endif
+		.reg_init_values[MSM_SPM_REG_SAW_CFG] = 0x1C,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_CTL] = 0x68,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_SLP_TMR_DLY] = 0x0C0CFFFF,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_WAKE_TMR_DLY] = 0x78780FFF,
+
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_CLK_EN] = 0x01,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_HSFS_PRECLMP_EN] = 0x07,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_HSFS_POSTCLMP_EN] = 0x00,
+
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_CLMP_EN] = 0x01,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_RST_EN] = 0x00,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_MPM_CFG] = 0x00,
+
+		.awake_vlevel = 0xA0,
+		.retention_vlevel = 0x89,
+		.collapse_vlevel = 0x20,
+		.retention_mid_vlevel = 0x89,
+		.collapse_mid_vlevel = 0x89,
+
+		.vctl_timeout_us = 50,
+	},
+
+	[1] = {
+		.reg_base_addr = MSM_SAW1_BASE,
+
+#ifdef CONFIG_MSM_AVS_HW
+		.reg_init_values[MSM_SPM_REG_SAW_AVS_CTL] = 0x586020FF,
+#endif
+		.reg_init_values[MSM_SPM_REG_SAW_CFG] = 0x1C,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_CTL] = 0x68,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_SLP_TMR_DLY] = 0x0C0CFFFF,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_WAKE_TMR_DLY] = 0x78780FFF,
+
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_CLK_EN] = 0x13,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_HSFS_PRECLMP_EN] = 0x07,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_HSFS_POSTCLMP_EN] = 0x00,
+
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_CLMP_EN] = 0x01,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_RST_EN] = 0x00,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_MPM_CFG] = 0x00,
+
+		.awake_vlevel = 0xA0,
+		.retention_vlevel = 0x89,
+		.collapse_vlevel = 0x20,
+		.retention_mid_vlevel = 0x89,
+		.collapse_mid_vlevel = 0x89,
+
+		.vctl_timeout_us = 50,
+	},
+};
+
 static struct platform_device *devices[] __initdata = {
 	&ram_console_device,
 };
@@ -155,6 +272,17 @@ static void __init msm8x60_init(void)
 	BUG_ON(msm_rpmrs_levels_init(&msm_rpmrs_data));
 	if (msm_xo_init())
 		pr_err("Failed to initialize XO votes\n");
+
+	msm8x60_check_2d_hardware();
+
+	/*
+	 * Initialize SPM before acpuclock as the latter calls into SPM
+	 * driver to set ACPU voltages.
+	 */
+	if (SOCINFO_VERSION_MAJOR(socinfo_get_version()) != 1)
+		msm_spm_init(msm_spm_data, ARRAY_SIZE(msm_spm_data));
+	else
+		msm_spm_init(msm_spm_data_v1, ARRAY_SIZE(msm_spm_data_v1));
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 }
