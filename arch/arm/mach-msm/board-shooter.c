@@ -1,5 +1,6 @@
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
+#include <linux/mfd/pmic8058.h>
 
 #include <linux/bootmem.h>
 #include <linux/proc_fs.h>
@@ -14,8 +15,13 @@
 #include <mach/board.h>
 #include <mach/board_htc.h>
 #include <mach/msm_iomap.h>
+#include <mach/msm_xo.h>
+#include <mach/restart.h>
+#include <mach/rpm.h>
+#include <mach/rpm-regulator.h>
 #include <mach/socinfo.h>
 
+#include "rpm_resources.h"
 #include "timer.h"
 #include "board-shooter.h"
 
@@ -40,6 +46,90 @@ static struct platform_device ram_console_device = {
 	.resource	= ram_console_resources,
 };
 
+static struct msm_rpmrs_level msm_rpmrs_levels[] __initdata = {
+	{
+		MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT,
+		MSM_RPMRS_LIMITS(ON, ACTIVE, MAX, ACTIVE),
+		true,
+		1, 8000, 100000, 1,
+	},
+
+	{
+		MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE,
+		MSM_RPMRS_LIMITS(ON, ACTIVE, MAX, ACTIVE),
+		true,
+		1500, 5000, 60100000, 3000,
+	},
+
+	{
+		MSM_PM_SLEEP_MODE_POWER_COLLAPSE,
+		MSM_RPMRS_LIMITS(ON, ACTIVE, MAX, ACTIVE),
+		false,
+		1800, 5000, 60350000, 3500,
+	},
+	{
+		MSM_PM_SLEEP_MODE_POWER_COLLAPSE,
+		MSM_RPMRS_LIMITS(OFF, ACTIVE, MAX, ACTIVE),
+		false,
+		3800, 4500, 65350000, 5500,
+	},
+
+	{
+		MSM_PM_SLEEP_MODE_POWER_COLLAPSE,
+		MSM_RPMRS_LIMITS(ON, HSFS_OPEN, MAX, ACTIVE),
+		false,
+		2800, 2500, 66850000, 4800,
+	},
+
+	{
+		MSM_PM_SLEEP_MODE_POWER_COLLAPSE,
+		MSM_RPMRS_LIMITS(OFF, HSFS_OPEN, MAX, ACTIVE),
+		false,
+		4800, 2000, 71850000, 6800,
+	},
+
+	{
+		MSM_PM_SLEEP_MODE_POWER_COLLAPSE,
+		MSM_RPMRS_LIMITS(OFF, HSFS_OPEN, ACTIVE, RET_HIGH),
+		false,
+		6800, 500, 75850000, 8800,
+	},
+
+	{
+		MSM_PM_SLEEP_MODE_POWER_COLLAPSE,
+		MSM_RPMRS_LIMITS(OFF, HSFS_OPEN, RET_HIGH, RET_LOW),
+		false,
+		7800, 0, 76350000, 9800,
+	},
+};
+
+static struct msm_rpmrs_platform_data msm_rpmrs_data __initdata = {
+	.levels = &msm_rpmrs_levels[0],
+	.num_levels = ARRAY_SIZE(msm_rpmrs_levels),
+	.vdd_mem_levels  = {
+		[MSM_RPMRS_VDD_MEM_RET_LOW]     = 500,
+		[MSM_RPMRS_VDD_MEM_RET_HIGH]    = 750,
+		[MSM_RPMRS_VDD_MEM_ACTIVE]      = 1000,
+		[MSM_RPMRS_VDD_MEM_MAX]         = 1250,
+	},
+	.vdd_dig_levels = {
+		[MSM_RPMRS_VDD_DIG_RET_LOW]     = 500,
+		[MSM_RPMRS_VDD_DIG_RET_HIGH]    = 750,
+		[MSM_RPMRS_VDD_DIG_ACTIVE]      = 1000,
+		[MSM_RPMRS_VDD_DIG_MAX]         = 1250,
+	},
+	.vdd_mask = 0xFFF,
+	.rpmrs_target_id = {
+		[MSM_RPMRS_ID_PXO_CLK]          = MSM_RPM_ID_PXO_CLK,
+		[MSM_RPMRS_ID_L2_CACHE_CTL]     = MSM_RPM_ID_APPS_L2_CACHE_CTL,
+		[MSM_RPMRS_ID_VDD_DIG_0]        = MSM_RPM_ID_SMPS1_0,
+		[MSM_RPMRS_ID_VDD_DIG_1]        = MSM_RPM_ID_SMPS1_1,
+		[MSM_RPMRS_ID_VDD_MEM_0]        = MSM_RPM_ID_SMPS0_0,
+		[MSM_RPMRS_ID_VDD_MEM_1]        = MSM_RPM_ID_SMPS0_1,
+		[MSM_RPMRS_ID_RPM_CTL]          = MSM_RPM_ID_TRIGGER_SET_FROM,
+	},
+};
+
 static struct platform_device *devices[] __initdata = {
 	&ram_console_device,
 };
@@ -55,6 +145,17 @@ static void __init msm8x60_map_io(void)
 
 static void __init msm8x60_init(void)
 {
+	pmic_reset_irq = PM8058_IRQ_BASE + PM8058_RESOUT_IRQ;
+
+	/*
+	 * Initialize RPM first as other drivers and devices may need
+	 * it for their initialization.
+	 */
+	BUG_ON(msm_rpm_init(&msm8660_rpm_data));
+	BUG_ON(msm_rpmrs_levels_init(&msm_rpmrs_data));
+	if (msm_xo_init())
+		pr_err("Failed to initialize XO votes\n");
+
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 }
 
