@@ -34,6 +34,7 @@
 #include <mach/msm_hsusb.h>
 #include <mach/msm_iomap.h>
 #include <mach/msm_memtypes.h>
+#include <mach/msm_serial_hs.h>
 #include <mach/msm_spi.h>
 #include <mach/msm_xo.h>
 #include <mach/restart.h>
@@ -1635,6 +1636,34 @@ static struct platform_device rpm_regulator_device = {
 	},
 };
 
+#ifdef CONFIG_SERIAL_MSM_HS
+static int configure_uart_gpios(int on)
+{
+	int ret = 0, i;
+	int uart_gpios[] = {53, 54, 55, 56};
+	for (i = 0; i < ARRAY_SIZE(uart_gpios); i++) {
+		if (on) {
+			ret = msm_gpiomux_get(uart_gpios[i]);
+			if (unlikely(ret))
+				break;
+		} else {
+			ret = msm_gpiomux_put(uart_gpios[i]);
+			if (unlikely(ret))
+				return ret;
+		}
+	}
+	if (ret)
+		for (; i >= 0; i--)
+			msm_gpiomux_put(uart_gpios[i]);
+	return ret;
+}
+static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
+       .inject_rx_on_wakeup = 1,
+       .rx_to_inject = 0xFD,
+       .gpio_config = configure_uart_gpios,
+};
+#endif
+
 static struct platform_device *early_regulators[] __initdata = {
 	&msm_device_saw_s0,
 	&msm_device_saw_s1,
@@ -1922,6 +1951,7 @@ static struct msm_ssbi_platform_data msm8x60_ssbi_pm8058_pdata __devinitdata = {
 static struct platform_device *devices[] __initdata = {
 	&ram_console_device,
 	&msm_device_smd,
+	&msm_device_uart_dm12,
 	&msm_pil_q6v3,
 	&msm_pil_modem,
 	&msm_pil_tzapps,
@@ -3051,6 +3081,11 @@ static void __init msm8x60_init_buses(void)
 #endif
 #ifdef CONFIG_USB_GADGET_MSM_72K
 	msm_device_gadget_peripheral.dev.platform_data = &msm_gadget_pdata;
+#endif
+#ifdef CONFIG_SERIAL_MSM_HS
+	msm_uart_dm1_pdata.wakeup_irq = gpio_to_irq(SHOOTER_GPIO_BT_HOST_WAKE);
+	msm_device_uart_dm1.name = "msm_serial_hs_brcm"; /* for brcm */
+	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
 #endif
 #ifdef CONFIG_MSM_BUS_SCALING
 	/* RPM calls are only enabled on V2 */
