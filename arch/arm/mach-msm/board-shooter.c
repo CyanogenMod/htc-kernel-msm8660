@@ -9,6 +9,8 @@
 #endif
 
 #include <linux/bootmem.h>
+#include <linux/msm_adc.h>
+#include <linux/m_adcproc.h>
 #include <linux/proc_fs.h>
 
 #include <asm/mach/arch.h>
@@ -18,6 +20,7 @@
 
 #include <mach/board.h>
 #include <mach/board_htc.h>
+#include <mach/board-msm8660.h>
 #include <mach/gpiomux.h>
 #include <mach/msm_bus_board.h>
 #include <mach/msm_iomap.h>
@@ -44,6 +47,31 @@
 #ifdef CONFIG_ION_MSM
 static struct platform_device ion_dev;
 #endif
+
+struct pm8xxx_mpp_init_info {
+	unsigned			mpp;
+	struct pm8xxx_mpp_config_data	config;
+};
+
+#define PM8058_MPP_INIT(_mpp, _type, _level, _control) \
+{ \
+	.mpp	= PM8058_MPP_PM_TO_SYS(_mpp), \
+	.config	= { \
+		.type		= PM8XXX_MPP_TYPE_##_type, \
+		.level		= _level, \
+		.control	= PM8XXX_MPP_##_control, \
+	} \
+}
+
+#define PM8901_MPP_INIT(_mpp, _type, _level, _control) \
+{ \
+	.mpp	= PM8901_MPP_PM_TO_SYS(_mpp), \
+	.config	= { \
+		.type		= PM8XXX_MPP_TYPE_##_type, \
+		.level		= _level, \
+		.control	= PM8XXX_MPP_##_control, \
+	} \
+}
 
 unsigned engineerid, mem_size_mb;
 
@@ -982,6 +1010,272 @@ static struct platform_device *early_devices[] __initdata = {
 	&msm_device_dmov_adm1,
 };
 
+#ifdef CONFIG_SENSORS_MSM_ADC
+static struct adc_access_fn xoadc_fn = {
+	pm8058_xoadc_select_chan_and_start_conv,
+	pm8058_xoadc_read_adc_code,
+	pm8058_xoadc_get_properties,
+	pm8058_xoadc_slot_request,
+	pm8058_xoadc_restore_slot,
+	pm8058_xoadc_calibrate,
+};
+
+static struct msm_adc_channels msm_adc_channels_data[] = {
+	{"vbatt", CHANNEL_ADC_VBATT, 0, &xoadc_fn, CHAN_PATH_TYPE2,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE3, scale_default},
+	{"vcoin", CHANNEL_ADC_VCOIN, 0, &xoadc_fn, CHAN_PATH_TYPE1,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE2, scale_default},
+	{"vcharger_channel", CHANNEL_ADC_VCHG, 0, &xoadc_fn, CHAN_PATH_TYPE3,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE4, scale_default},
+	{"charger_current_monitor", CHANNEL_ADC_CHG_MONITOR, 0, &xoadc_fn,
+		CHAN_PATH_TYPE4,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE1, scale_default},
+	{"vph_pwr", CHANNEL_ADC_VPH_PWR, 0, &xoadc_fn, CHAN_PATH_TYPE5,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE3, scale_default},
+	{"usb_vbus", CHANNEL_ADC_USB_VBUS, 0, &xoadc_fn, CHAN_PATH_TYPE11,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE3, scale_default},
+	{"pmic_therm", CHANNEL_ADC_DIE_TEMP, 0, &xoadc_fn, CHAN_PATH_TYPE12,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE1, scale_pmic_therm},
+	{"pmic_therm_4K", CHANNEL_ADC_DIE_TEMP_4K, 0, &xoadc_fn,
+		CHAN_PATH_TYPE12,
+		ADC_CONFIG_TYPE1, ADC_CALIB_CONFIG_TYPE7, scale_pmic_therm},
+	{"xo_therm", CHANNEL_ADC_XOTHERM, 0, &xoadc_fn, CHAN_PATH_TYPE_NONE,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE5, tdkntcgtherm},
+	{"xo_therm_4K", CHANNEL_ADC_XOTHERM_4K, 0, &xoadc_fn,
+		CHAN_PATH_TYPE_NONE,
+		ADC_CONFIG_TYPE1, ADC_CALIB_CONFIG_TYPE6, tdkntcgtherm},
+	{"hdset_detect", CHANNEL_ADC_HDSET, 0, &xoadc_fn, CHAN_PATH_TYPE6,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE1, scale_default},
+	{"chg_batt_amon", CHANNEL_ADC_BATT_AMON, 0, &xoadc_fn, CHAN_PATH_TYPE10,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE1,
+		scale_xtern_chgr_cur},
+	{"msm_therm", CHANNEL_ADC_MSM_THERM, 0, &xoadc_fn, CHAN_PATH_TYPE8,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE2, scale_msm_therm},
+	{"batt_therm", CHANNEL_ADC_BATT_THERM, 0, &xoadc_fn, CHAN_PATH_TYPE7,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE2, scale_batt_therm},
+	{"batt_id", CHANNEL_ADC_BATT_ID, 0, &xoadc_fn, CHAN_PATH_TYPE9,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE2, scale_default},
+};
+
+static struct msm_adc_platform_data msm_adc_pdata = {
+	.channel = msm_adc_channels_data,
+	.num_chan_supported = ARRAY_SIZE(msm_adc_channels_data),
+};
+
+static struct platform_device msm_adc_device = {
+	.name   = "msm_adc",
+	.id = -1,
+	.dev = {
+		.platform_data = &msm_adc_pdata,
+	},
+};
+
+static void pmic8058_xoadc_mpp_config(void)
+{
+	/* Do not set mpp to amux in here.
+	   Set the mpp to amux mapping when needed and then reset */
+}
+
+static struct regulator *vreg_ldo18_adc;
+
+static int pmic8058_xoadc_vreg_config(int on)
+{
+	int rc;
+
+	if (on) {
+		rc = regulator_enable(vreg_ldo18_adc);
+		if (rc)
+			pr_err("%s: Enable of regulator ldo18_adc "
+						"failed\n", __func__);
+	} else {
+		rc = regulator_disable(vreg_ldo18_adc);
+		if (rc)
+			pr_err("%s: Disable of regulator ldo18_adc "
+						"failed\n", __func__);
+	}
+
+	return rc;
+}
+
+static int pmic8058_xoadc_vreg_setup(void)
+{
+	int rc;
+
+	vreg_ldo18_adc = regulator_get(NULL, "8058_l18");
+	if (IS_ERR(vreg_ldo18_adc)) {
+		printk(KERN_ERR "%s: vreg get failed (%ld)\n",
+			__func__, PTR_ERR(vreg_ldo18_adc));
+		rc = PTR_ERR(vreg_ldo18_adc);
+		goto fail;
+	}
+
+	rc = regulator_set_voltage(vreg_ldo18_adc, 2200000, 2200000);
+	if (rc) {
+		pr_err("%s: unable to set ldo18 voltage to 2.2V\n", __func__);
+		goto fail;
+	}
+
+	return rc;
+fail:
+	regulator_put(vreg_ldo18_adc);
+	return rc;
+}
+
+static void pmic8058_xoadc_vreg_shutdown(void)
+{
+	regulator_put(vreg_ldo18_adc);
+}
+
+/* usec. For this ADC,
+ * this time represents clk rate @ txco w/ 1024 decimation ratio.
+ * Each channel has different configuration, thus at the time of starting
+ * the conversion, xoadc will return actual conversion time
+ */
+static struct adc_properties pm8058_xoadc_data = {
+	.adc_reference		= 2200, /* milli-voltage for this adc */
+	.bitresolution		= 15,
+	.bipolar		= 0,
+	.conversiontime		= 54,
+};
+
+static struct xoadc_platform_data pm8058_xoadc_pdata = {
+	.xoadc_prop = &pm8058_xoadc_data,
+	.xoadc_mpp_config = pmic8058_xoadc_mpp_config,
+	.xoadc_vreg_set = pmic8058_xoadc_vreg_config,
+	.xoadc_num = XOADC_PMIC_0,
+	.xoadc_vreg_setup = pmic8058_xoadc_vreg_setup,
+	.xoadc_vreg_shutdown = pmic8058_xoadc_vreg_shutdown,
+};
+#endif
+
+#ifdef CONFIG_PMIC8058
+static int pm8058_pwm_config(struct pwm_device *pwm, int ch, int on)
+{
+	struct pm_gpio pwm_gpio_config = {
+		.direction      = PM_GPIO_DIR_OUT,
+		.output_buffer  = PM_GPIO_OUT_BUF_CMOS,
+		.output_value   = 0,
+		.pull           = PM_GPIO_PULL_NO,
+		.vin_sel        = PM8058_GPIO_VIN_VPH,
+		.out_strength   = PM_GPIO_STRENGTH_HIGH,
+		.function       = PM_GPIO_FUNC_2,
+	};
+
+	int rc = -EINVAL;
+	int id, mode, max_mA;
+
+	id = mode = max_mA = 0;
+	switch (ch) {
+	case 0:
+	case 1:
+	case 2:
+		if (on) {
+			id = 24 + ch;
+			rc = pm8xxx_gpio_config(PM8058_GPIO_PM_TO_SYS(id - 1),
+							&pwm_gpio_config);
+			if (rc)
+				pr_err("%s: pm8xxx_gpio_config(%d): rc=%d\n",
+					__func__, id, rc);
+		}
+		break;
+
+	case 6:
+		id = PM_PWM_LED_FLASH;
+		mode = PM_PWM_CONF_PWM1;
+		max_mA = 300;
+		break;
+
+	case 7:
+		id = PM_PWM_LED_FLASH1;
+		mode = PM_PWM_CONF_PWM1;
+		max_mA = 300;
+		break;
+
+	default:
+		break;
+	}
+
+	if (ch >= 6 && ch <= 7) {
+		if (!on) {
+			mode = PM_PWM_CONF_NONE;
+			max_mA = 0;
+		}
+		rc = pm8058_pwm_config_led(pwm, id, mode, max_mA);
+		if (rc)
+			pr_err("%s: pm8058_pwm_config_led(ch=%d): rc=%d\n",
+			       __func__, ch, rc);
+	}
+	return rc;
+
+}
+
+static struct pm8058_pwm_pdata pm8058_pwm_data = {
+	.config		= pm8058_pwm_config,
+};
+
+#define PM8058_GPIO_INT           88
+static struct pm8xxx_vibrator_platform_data pm8058_vib_pdata = {
+	.initial_vibrate_ms  = 500,
+	.level_mV = 3000,
+	.max_timeout_ms = 15000,
+};
+
+static struct pm8xxx_rtc_platform_data pm8058_rtc_pdata = {
+	.rtc_write_enable       = false,
+	.rtc_alarm_powerup	= false,
+};
+
+static struct pm8xxx_pwrkey_platform_data pm8058_pwrkey_pdata = {
+	.pull_up		= 1,
+	.kpd_trigger_delay_us   = 15625,
+	.wakeup			= 1,
+};
+
+static struct pm8xxx_misc_platform_data pm8058_misc_pdata = {
+	.priority		= 0,
+};
+
+static struct pm8xxx_irq_platform_data pm8058_irq_pdata = {
+	.irq_base		= PM8058_IRQ_BASE,
+	.devirq			= MSM_GPIO_TO_INT(PM8058_GPIO_INT),
+	.irq_trigger_flag	= IRQF_TRIGGER_LOW,
+};
+
+static struct pm8xxx_gpio_platform_data pm8058_gpio_pdata = {
+	.gpio_base	= PM8058_GPIO_PM_TO_SYS(0),
+};
+
+static struct pm8xxx_mpp_platform_data pm8058_mpp_pdata = {
+	.mpp_base	= PM8058_MPP_PM_TO_SYS(0),
+};
+
+static struct pm8058_platform_data pm8058_platform_data = {
+	.irq_pdata		= &pm8058_irq_pdata,
+	.gpio_pdata		= &pm8058_gpio_pdata,
+	.mpp_pdata		= &pm8058_mpp_pdata,
+	.rtc_pdata		= &pm8058_rtc_pdata,
+	.pwrkey_pdata		= &pm8058_pwrkey_pdata,
+//	.othc0_pdata		= &othc_config_pdata_0,
+//	.othc1_pdata		= &othc_config_pdata_1,
+//	.othc2_pdata		= &othc_config_pdata_2,
+	.pwm_pdata		= &pm8058_pwm_data,
+	.misc_pdata		= &pm8058_misc_pdata,
+#ifdef CONFIG_SENSORS_MSM_ADC
+	.xoadc_pdata		= &pm8058_xoadc_pdata,
+#endif
+};
+
+#ifdef CONFIG_MSM_SSBI
+static struct msm_ssbi_platform_data msm8x60_ssbi_pm8058_pdata __devinitdata = {
+	.controller_type = MSM_SBI_CTRL_PMIC_ARBITER,
+	.slave	= {
+		.name			= "pm8058-core",
+		.platform_data		= &pm8058_platform_data,
+	},
+};
+#endif
+#endif  /* CONFIG_PMIC8058 */
+
 static struct platform_device *devices[] __initdata = {
 	&ram_console_device,
 	&msm_device_smd,
@@ -994,6 +1288,9 @@ static struct platform_device *devices[] __initdata = {
 #if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)
 	&msm_gsbi1_qup_spi_device,
 	&msm_gsbi2_qup_spi_device,
+#endif
+#ifdef CONFIG_MSM_SSBI
+	&msm_device_ssbi_pmic1,
 #endif
 #ifdef CONFIG_ANDROID_PMEM
 #ifndef CONFIG_MSM_MULTIMEDIA_USE_ION
@@ -1022,6 +1319,9 @@ static struct platform_device *devices[] __initdata = {
 	&msm8660_rpm_stat_device,
 #endif
 	&msm_device_vidc,
+#ifdef CONFIG_SENSORS_MSM_ADC
+	&msm_adc_device,
+#endif
 	&rpm_regulator_device,
 #ifdef CONFIG_HW_RANDOM_MSM
 	&msm_device_rng,
@@ -2068,6 +2368,10 @@ static void __init msm8x60_init_buses(void)
 	else
 		msm_gsbi3_qup_spi_device.dev.platform_data = &msm_gsbi3_qup_spi_pdata;
 #endif
+#ifdef CONFIG_MSM_SSBI
+	msm_device_ssbi_pmic1.dev.platform_data =
+				&msm8x60_ssbi_pm8058_pdata;
+#endif
 #ifdef CONFIG_MSM_BUS_SCALING
 	/* RPM calls are only enabled on V2 */
 	if (SOCINFO_VERSION_MAJOR(socinfo_get_version()) == 2) {
@@ -2131,6 +2435,8 @@ static void __init msm8x60_init(void)
 
 	msm8x60_init_gpiomux(msm8x60_htc_gpiomux_cfgs);
 	msm8x60_init_mmc();
+
+	pm8058_platform_data.vibrator_pdata = &pm8058_vib_pdata;
 
 	platform_add_devices(msm_footswitch_devices,
 					     msm_num_footswitch_devices);
