@@ -1887,6 +1887,235 @@ static struct pm8058_pwm_pdata pm8058_pwm_data = {
 };
 
 #define PM8058_GPIO_INT           88
+static struct pmic8058_led pmic8058_flash_leds[] = {
+	[0] = {
+		.name		= "camera:flash0",
+		.max_brightness = 15,
+		.id		= PMIC8058_ID_FLASH_LED_0,
+	},
+	[1] = {
+		.name		= "camera:flash1",
+		.max_brightness = 15,
+		.id		= PMIC8058_ID_FLASH_LED_1,
+	},
+};
+
+static struct pmic8058_leds_platform_data pm8058_flash_leds_data = {
+	.num_leds = ARRAY_SIZE(pmic8058_flash_leds),
+	.leds	= pmic8058_flash_leds,
+};
+
+static int pm8058_gpios_init(void)
+{
+	int i;
+	int rc;
+	struct pm8058_gpio_cfg {
+		int                gpio;
+		struct pm_gpio	   cfg;
+	};
+
+	struct pm8058_gpio_cfg gpio_cfgs[] = {
+#ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
+		{
+			PMIC_GPIO_SDC3_DET - 1,
+			{
+				.direction      = PM_GPIO_DIR_IN,
+				.pull           = PM_GPIO_PULL_UP_30,
+				.vin_sel        = 2,
+				.function       = PM_GPIO_FUNC_NORMAL,
+				.inv_int_pol    = 0,
+			},
+		},
+#endif
+		{ /* Audio Microphone Selector */
+			SHOOTER_AUD_MIC_SEL,	/* 26 */
+			{
+				.direction	= PM_GPIO_DIR_OUT,
+				.output_value	= 0,
+				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
+				.pull		= PM_GPIO_PULL_NO,
+				.out_strength	= PM_GPIO_STRENGTH_HIGH,
+				.function	= PM_GPIO_FUNC_NORMAL,
+				.vin_sel	= 2,	/* LDO 1.8 V */
+				.inv_int_pol	= 0,
+			}
+		},
+		{ /* Audio Receiver Amplifier */
+			SHOOTER_AUD_HANDSET_ENO,	/* 17 */
+			{
+				.direction	= PM_GPIO_DIR_OUT,
+				.output_value	= 0,
+				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
+				.pull		= PM_GPIO_PULL_NO,
+				.out_strength	= PM_GPIO_STRENGTH_HIGH,
+				.function	= PM_GPIO_FUNC_NORMAL,
+				.vin_sel	= 6,	/* LDO5 2.85 V */
+				.inv_int_pol	= 0,
+			}
+		},
+		{ /* Audio Speaker Amplifier */
+			SHOOTER_AUD_SPK_ENO,	/* 18 */
+			{
+				.direction	= PM_GPIO_DIR_OUT,
+				.output_value	= 0,
+				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
+				.pull		= PM_GPIO_PULL_NO,
+				.out_strength	= PM_GPIO_STRENGTH_HIGH,
+				.function	= PM_GPIO_FUNC_NORMAL,
+				.vin_sel	= 6,	/* LDO5 2.85 V */
+				.inv_int_pol	= 0,
+			}
+		},
+		{ /* Timpani Reset */
+			20,
+			{
+				.direction	= PM_GPIO_DIR_OUT,
+				.output_value	= 0,
+				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
+				.pull		= PM_GPIO_PULL_NO,
+				.out_strength	= PM_GPIO_STRENGTH_HIGH,
+				.function	= PM_GPIO_FUNC_NORMAL,
+				.vin_sel	= 2,
+				.inv_int_pol	= 0,
+			}
+		},
+		{
+			SHOOTER_PS_VOUT,
+			{
+				.direction	= PM_GPIO_DIR_IN,
+				.pull		= PM_GPIO_PULL_UP_1P5,
+				.vin_sel	= PM8058_GPIO_VIN_L5,
+				.function	= PM_GPIO_FUNC_NORMAL,
+				.inv_int_pol	= 0,
+			},
+		},
+		{ /* Green LED */
+			SHOOTER_GREEN_LED,
+			{
+				.direction	= PM_GPIO_DIR_OUT,
+				.output_value	= 1,
+				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
+				.pull		= PM_GPIO_PULL_NO,
+				.out_strength	= PM_GPIO_STRENGTH_HIGH,
+				.function	= PM_GPIO_FUNC_2,
+				.vin_sel	= PM8058_GPIO_VIN_L5,
+				.inv_int_pol	= 0,
+			}
+		},
+		{ /* AMBER */
+			SHOOTER_AMBER_LED,
+			{
+				.direction	= PM_GPIO_DIR_OUT,
+				.output_value	= 1,
+				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
+				.pull		= PM_GPIO_PULL_NO,
+				.out_strength	= PM_GPIO_STRENGTH_HIGH,
+				.function	= PM_GPIO_FUNC_2,
+				.vin_sel	= PM8058_GPIO_VIN_L5,
+				.inv_int_pol	= 0,
+			}
+		},
+		{ /* WIMAX HOST WAKEUP */
+			SHOOTER_WIMAX_HOST_WAKEUP,
+			{
+				.direction	= PM_GPIO_DIR_IN,
+				.output_value	= 0,
+				.pull		= PM_GPIO_PULL_DN,
+				.function	= PM_GPIO_FUNC_NORMAL,
+				.vin_sel	= PM8058_GPIO_VIN_S3,
+				.inv_int_pol	= 0,
+			}
+		},
+		{ /* 3D CLK */
+			SHOOTER_3DCLK,
+			{
+				.direction	= PM_GPIO_DIR_OUT,
+				.output_value	= 0,
+				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
+				.pull		= PM_GPIO_PULL_NO,
+				.out_strength	= PM_GPIO_STRENGTH_HIGH,
+				.function	= PM_GPIO_FUNC_NORMAL,
+				.vin_sel	= PM8058_GPIO_VIN_L5,
+				.inv_int_pol	= 0,
+			}
+		},
+		{ /* 3DLCM_PD */
+			SHOOTER_3DLCM_PD,
+			{
+				.direction	= PM_GPIO_DIR_OUT,
+				.output_value	= 0,
+				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
+				.pull		= PM_GPIO_PULL_NO,
+				.out_strength	= PM_GPIO_STRENGTH_HIGH,
+				.function	= PM_GPIO_FUNC_NORMAL,
+				.vin_sel	= PM8058_GPIO_VIN_L5,
+				.inv_int_pol	= 0,
+			}
+		},
+		{ /* TORCH_SET1 for Flashlight */
+			SHOOTER_TORCH_SET1,
+			{
+				.direction	= PM_GPIO_DIR_OUT,
+				.output_value	= 0,
+				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
+				.pull		= PM_GPIO_PULL_NO,
+				.out_strength	= PM_GPIO_STRENGTH_HIGH,
+				.function	= PM_GPIO_FUNC_NORMAL,
+				.vin_sel	= PM8058_GPIO_VIN_L5,
+				.inv_int_pol	= 0,
+			}
+		},
+		{ /* TORCH_SET2 for Flashlight */
+			SHOOTER_TORCH_SET2,
+			{
+				.direction	= PM_GPIO_DIR_OUT,
+				.output_value	= 0,
+				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
+				.pull		= PM_GPIO_PULL_NO,
+				.out_strength	= PM_GPIO_STRENGTH_HIGH,
+				.function	= PM_GPIO_FUNC_NORMAL,
+				.vin_sel	= PM8058_GPIO_VIN_L5,
+				.inv_int_pol	= 0,
+			}
+		},
+		{
+			SHOOTER_AUD_REMO_EN,
+			{
+				.direction	= PM_GPIO_DIR_OUT,
+				.output_value	= 0,
+				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
+				.pull		= PM_GPIO_PULL_NO,
+				.out_strength	= PM_GPIO_STRENGTH_HIGH,
+				.function	= PM_GPIO_FUNC_NORMAL,
+				.vin_sel	= PM8058_GPIO_VIN_S3, /* 1.8 V */
+				.inv_int_pol	= 0,
+			}
+		},
+		{
+			SHOOTER_AUD_REMO_PRES,
+			{
+				.direction      = PM_GPIO_DIR_IN,
+				.pull           = PM_GPIO_PULL_NO,
+				.vin_sel        = PM8058_GPIO_VIN_L5, /* 2.85 V */
+				.function       = PM_GPIO_FUNC_NORMAL,
+				.inv_int_pol    = 0,
+			},
+		},
+	};
+
+	for (i = 0; i < ARRAY_SIZE(gpio_cfgs); ++i) {
+		rc = pm8xxx_gpio_config(gpio_cfgs[i].gpio,
+				&gpio_cfgs[i].cfg);
+		if (rc < 0) {
+			pr_err("%s pmic gpio config failed\n",
+				__func__);
+			return rc;
+		}
+	}
+
+	return 0;
+}
+
 static struct pm8xxx_vibrator_platform_data pm8058_vib_pdata = {
 	.initial_vibrate_ms  = 500,
 	.level_mV = 3000,
@@ -3222,6 +3451,7 @@ static void __init msm8x60_init(void)
 	msm8x60_init_gpiomux(msm8x60_htc_gpiomux_cfgs);
 	msm8x60_init_mmc();
 
+	pm8058_platform_data.leds_pdata = &pm8058_flash_leds_data;
 	pm8058_platform_data.vibrator_pdata = &pm8058_vib_pdata;
 
 	platform_add_devices(msm_footswitch_devices,
@@ -3238,6 +3468,8 @@ static void __init msm8x60_init(void)
 	msm_cpuidle_set_states(msm_cstates, ARRAY_SIZE(msm_cstates),
 				msm_pm_data);
 	BUG_ON(msm_pm_boot_init(&msm_pm_boot_pdata));
+
+	pm8058_gpios_init();
 }
 
 static void __init shooter_fixup(struct machine_desc *desc, struct tag *tags,
