@@ -66,6 +66,54 @@ static struct platform_device ram_console_device = {
 	.resource	= ram_console_resources,
 };
 
+static struct platform_device msm_tsens_device = {
+	.name   = "tsens-tm",
+	.id = -1,
+};
+
+#ifdef CONFIG_MSM_VPE
+static struct resource msm_vpe_resources[] = {
+	{
+		.start	= 0x05300000,
+		.end	= 0x05300000 + SZ_1M - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= INT_VPE,
+		.end	= INT_VPE,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device msm_vpe_device = {
+	.name = "msm_vpe",
+	.id   = 0,
+	.num_resources = ARRAY_SIZE(msm_vpe_resources),
+	.resource = msm_vpe_resources,
+};
+#endif
+
+#ifdef CONFIG_MSM_GEMINI
+static struct resource msm_gemini_resources[] = {
+	{
+		.start  = 0x04600000,
+		.end    = 0x04600000 + SZ_1M - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+	{
+		.start  = INT_JPEG,
+		.end    = INT_JPEG,
+		.flags  = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device msm_gemini_device = {
+	.name           = "msm_gemini",
+	.resource       = msm_gemini_resources,
+	.num_resources  = ARRAY_SIZE(msm_gemini_resources),
+};
+#endif
+
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MSM_FB_PRIM_BUF_SIZE (1024 * 600 * 4 * 3) /* 4 bpp x 3 pages */
 #else
@@ -955,7 +1003,30 @@ static struct platform_device *devices[] __initdata = {
 #endif
 	&android_pmem_audio_device,
 #endif
+#ifdef CONFIG_MSM_ROTATOR
+	&msm_rotator_device,
+#endif
+	&msm_kgsl_3d0,
+	&msm_kgsl_2d0,
+	&msm_kgsl_2d1,
+#ifdef CONFIG_MSM_GEMINI
+	&msm_gemini_device,
+#endif
+#ifdef CONFIG_MSM_VPE
+	&msm_vpe_device,
+#endif
+#if defined(CONFIG_MSM_RPM_LOG) || defined(CONFIG_MSM_RPM_LOG_MODULE)
+	&msm8660_rpm_log_device,
+#endif
+#if defined(CONFIG_MSM_RPM_STATS_LOG)
+	&msm8660_rpm_stat_device,
+#endif
+	&msm_device_vidc,
 	&rpm_regulator_device,
+#ifdef CONFIG_HW_RANDOM_MSM
+	&msm_device_rng,
+#endif
+	&msm_tsens_device,
 	&msm8660_rpm_device,
 #ifdef CONFIG_ION_MSM
 	&ion_dev,
