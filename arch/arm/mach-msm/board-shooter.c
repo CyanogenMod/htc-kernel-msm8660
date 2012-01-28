@@ -31,6 +31,7 @@
 #include <mach/cpuidle.h>
 #include <mach/gpiomux.h>
 #include <mach/msm_bus_board.h>
+#include <mach/msm_dsps.h>
 #include <mach/msm_hsusb.h>
 #include <mach/msm_iomap.h>
 #include <mach/msm_memtypes.h>
@@ -2249,7 +2250,7 @@ static uint32_t gsbi10_gpio_table[] = {
 
 static void gsbi_qup_i2c_gpio_config(int adap_id, int config_type)
 {
-	printk(KERN_INFO "ZOMFG %s(): adap_id = %d, config_type = %d \n", __func__,adap_id,config_type);
+	printk(KERN_INFO "%s(): adap_id = %d, config_type = %d \n", __func__,adap_id,config_type);
 
 	if ((adap_id == MSM_GSBI4_QUP_I2C_BUS_ID) && (config_type == 1)) {
 		gpio_tlmm_config(gsbi4_gpio_table[0], GPIO_CFG_ENABLE);
@@ -2348,6 +2349,76 @@ static void __init msm8x60_map_io(void)
 
 	if (socinfo_init() < 0)
 		printk(KERN_ERR "%s: socinfo_init() failed!",   __func__);
+}
+
+/*
+ * Most segments of the EBI2 bus are disabled by default.
+ */
+static void __init msm8x60_init_ebi2(void)
+{
+	uint32_t ebi2_cfg;
+	void *ebi2_cfg_ptr;
+	struct clk *mem_clk = clk_get_sys("msm_ebi2", "mem_clk");
+
+	if (IS_ERR(mem_clk)) {
+		pr_err("%s: clk_get_sys(%s,%s), failed", __func__,
+					"msm_ebi2", "mem_clk");
+		return;
+	}
+	clk_enable(mem_clk);
+	clk_put(mem_clk);
+
+	ebi2_cfg_ptr = ioremap_nocache(0x1a100000, sizeof(uint32_t));
+	if (ebi2_cfg_ptr != 0) {
+		ebi2_cfg = readl_relaxed(ebi2_cfg_ptr);
+
+		if (machine_is_msm8x60_surf() || machine_is_msm8x60_ffa() ||
+			machine_is_msm8x60_fluid() ||
+			machine_is_msm8x60_dragon())
+			ebi2_cfg |= (1 << 4) | (1 << 5); /* CS2, CS3 */
+		else if (machine_is_msm8x60_sim())
+			ebi2_cfg |= (1 << 4); /* CS2 */
+		else if (machine_is_msm8x60_rumi3())
+			ebi2_cfg |= (1 << 5); /* CS3 */
+
+		writel_relaxed(ebi2_cfg, ebi2_cfg_ptr);
+		iounmap(ebi2_cfg_ptr);
+	}
+
+	if (machine_is_msm8x60_surf() || machine_is_msm8x60_ffa() ||
+	    machine_is_msm8x60_fluid() || machine_is_msm8x60_dragon() ||
+	     machine_is_shooter()) {
+		ebi2_cfg_ptr = ioremap_nocache(0x1a110000, SZ_4K);
+		if (ebi2_cfg_ptr != 0) {
+			/* EBI2_XMEM_CFG:PWRSAVE_MODE off */
+			writel_relaxed(0UL, ebi2_cfg_ptr);
+
+			/* CS2: Delay 9 cycles (140ns@64MHz) between SMSC
+			 * LAN9221 Ethernet controller reads and writes.
+			 * The lowest 4 bits are the read delay, the next
+			 * 4 are the write delay. */
+			writel_relaxed(0x031F1C99, ebi2_cfg_ptr + 0x10);
+#if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
+			/*
+			 * RECOVERY=5, HOLD_WR=1
+			 * INIT_LATENCY_WR=1, INIT_LATENCY_RD=1
+			 * WAIT_WR=1, WAIT_RD=2
+			 */
+			writel_relaxed(0x51010112, ebi2_cfg_ptr + 0x14);
+			/*
+			 * HOLD_RD=1
+			 * ADV_OE_RECOVERY=0, ADDR_HOLD_ENA=1
+			 */
+			writel_relaxed(0x01000020, ebi2_cfg_ptr + 0x34);
+#else
+			/* EBI2 CS3 muxed address/data,
+			   two cyc addr enable */
+			writel_relaxed(0xA3030020, ebi2_cfg_ptr + 0x34);
+
+#endif
+			iounmap(ebi2_cfg_ptr);
+		}
+	}
 }
 
 #define PMIC_GPIO_SDC3_DET 34
@@ -3147,7 +3218,7 @@ static void __init msm8x60_init(void)
 	platform_add_devices(early_devices, ARRAY_SIZE(early_devices));
 
 	acpuclk_init(&acpuclk_8x60_soc_data);
-
+	msm8x60_init_ebi2();
 	msm8x60_init_gpiomux(msm8x60_htc_gpiomux_cfgs);
 	msm8x60_init_mmc();
 
@@ -3167,8 +3238,6 @@ static void __init msm8x60_init(void)
 	msm_cpuidle_set_states(msm_cstates, ARRAY_SIZE(msm_cstates),
 				msm_pm_data);
 	BUG_ON(msm_pm_boot_init(&msm_pm_boot_pdata));
-
-	pr_err("NEXT\n");
 }
 
 static void __init shooter_fixup(struct machine_desc *desc, struct tag *tags,
