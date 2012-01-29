@@ -17,7 +17,11 @@
 
 #include <mach/board.h>
 
+#ifdef CONFIG_MACH_SHOOTER
 #define SHOOTER_PROJECT_NAME	"shooter"
+#else
+#define SHOOTER_PROJECT_NAME	"shooter_u"
+#endif
 
 
 /* Macros assume PMIC GPIOs start at 0 */
@@ -41,13 +45,12 @@
 
 
 /* Direct Keys */
-#define SHOOTER_GPIO_KEY_CAM_STEP1   (44)
 #define SHOOTER_GPIO_SW_LCM_3D       (64)
 #define SHOOTER_GPIO_SW_LCM_2D       (68)
 #define SHOOTER_GPIO_KEY_VOL_DOWN    (103)
 #define SHOOTER_GPIO_KEY_VOL_UP      (104)
 #define SHOOTER_GPIO_KEY_CAM_STEP2   (115)
-#define SHOOTER_GPIO_KEY_CAM_STEP1_XB   (123)
+#define SHOOTER_GPIO_KEY_CAM_STEP1   (123)
 #define SHOOTER_GPIO_KEY_POWER       (125)
 
 /* Battery */
@@ -88,8 +91,7 @@
 /* TP */
 #define SHOOTER_TP_I2C_SDA           (51)
 #define SHOOTER_TP_I2C_SCL           (52)
-#define SHOOTER_TP_ATT_N             (65)
-#define SHOOTER_TP_ATT_N_XC          (57)
+#define SHOOTER_TP_ATT_N             (57)
 
 /* LCD */
 #define GPIO_LCM_ID	50
@@ -137,11 +139,17 @@
 #define SHOOTER_LCM_3D_PDz		(135)
 
 /* CAMERA SPI */
+#ifdef CONFIG_MACH_SHOOTER
 #define SHOOTER_SP3D_SPI_DO                 (37)
 #define SHOOTER_SP3D_SPI_DI                 (38)
 #define SHOOTER_SP3D_SPI_CS                 (39)
 #define SHOOTER_SP3D_SPI_CLK                (40)
-
+#else
+#define SHOOTER_SP3D_SPI_DO                 (41)
+#define SHOOTER_SP3D_SPI_DI                 (42)
+#define SHOOTER_SP3D_SPI_CS                 (43)
+#define SHOOTER_SP3D_SPI_CLK                (44)
+#endif
 
 /* CAMERA GPIO */
 #define SHOOTER_CAM_I2C_SDA           (47)
@@ -161,13 +169,6 @@
 #define SHOOTER_WEBCAM_RST		(138)
 #define SHOOTER_CAM_SEL			(141)
 
-
-/* LCM */
-#define SHOOTER_CTL_3D_1		(131)
-#define SHOOTER_CTL_3D_2		(132)
-#define SHOOTER_CTL_3D_3		(133)
-#define SHOOTER_CTL_3D_4		(134)
-#define SHOOTER_LCM_3D_PDz		(135)
 
 /* PMIC */
 
@@ -191,7 +192,11 @@
 #define SHOOTER_WIMAX_DEBUG14      PMGPIO(35)
 #define SHOOTER_WIMAX_DEBUG15      PMGPIO(36)
 #define SHOOTER_TP_RST             PMGPIO(23)
+#ifdef CONFIG_MACH_SHOOTER
 #define SHOOTER_TORCH_SET1         PMGPIO(32)
+#else
+#define SHOOTER_TORCH_SET1         PMGPIO(40)
+#endif
 #define SHOOTER_TORCH_SET2         PMGPIO(31)
 #define SHOOTER_CHG_STAT	   PMGPIO(33)
 #define SHOOTER_AUD_REMO_EN        PMGPIO(15)
