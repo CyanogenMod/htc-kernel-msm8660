@@ -3495,6 +3495,7 @@ static void __init shooter_fixup(struct machine_desc *desc, struct tag *tags,
 MACHINE_START(SHOOTER, "HTC Evo 3D CDMA")
 	.fixup = shooter_fixup,
 	.map_io = msm8x60_map_io,
+	.reserve = msm8x60_reserve,
 	.init_irq = msm8x60_init_irq,
 	.handle_irq = gic_handle_irq,
 	.init_machine = msm8x60_init,
