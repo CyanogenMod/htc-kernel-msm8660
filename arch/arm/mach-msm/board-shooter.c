@@ -1917,7 +1917,7 @@ static int pm8058_gpios_init(void)
 	struct pm8058_gpio_cfg gpio_cfgs[] = {
 #ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
 		{
-			PMIC_GPIO_SDC3_DET - 1,
+			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SDC3_DET - 1),
 			{
 				.direction      = PM_GPIO_DIR_IN,
 				.pull           = PM_GPIO_PULL_UP_30,
@@ -1928,7 +1928,7 @@ static int pm8058_gpios_init(void)
 		},
 #endif
 		{ /* Audio Microphone Selector */
-			SHOOTER_AUD_MIC_SEL,	/* 26 */
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_MIC_SEL),	/* 26 */
 			{
 				.direction	= PM_GPIO_DIR_OUT,
 				.output_value	= 0,
@@ -1941,7 +1941,7 @@ static int pm8058_gpios_init(void)
 			}
 		},
 		{ /* Audio Receiver Amplifier */
-			SHOOTER_AUD_HANDSET_ENO,	/* 17 */
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_HANDSET_ENO),	/* 17 */
 			{
 				.direction	= PM_GPIO_DIR_OUT,
 				.output_value	= 0,
@@ -1954,7 +1954,7 @@ static int pm8058_gpios_init(void)
 			}
 		},
 		{ /* Audio Speaker Amplifier */
-			SHOOTER_AUD_SPK_ENO,	/* 18 */
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_SPK_ENO),	/* 18 */
 			{
 				.direction	= PM_GPIO_DIR_OUT,
 				.output_value	= 0,
@@ -1967,7 +1967,7 @@ static int pm8058_gpios_init(void)
 			}
 		},
 		{ /* Timpani Reset */
-			20,
+			PM8058_GPIO_PM_TO_SYS(20),
 			{
 				.direction	= PM_GPIO_DIR_OUT,
 				.output_value	= 0,
@@ -1980,7 +1980,7 @@ static int pm8058_gpios_init(void)
 			}
 		},
 		{
-			SHOOTER_PS_VOUT,
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_PS_VOUT),
 			{
 				.direction	= PM_GPIO_DIR_IN,
 				.pull		= PM_GPIO_PULL_UP_1P5,
@@ -1990,7 +1990,7 @@ static int pm8058_gpios_init(void)
 			},
 		},
 		{ /* Green LED */
-			SHOOTER_GREEN_LED,
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_GREEN_LED),
 			{
 				.direction	= PM_GPIO_DIR_OUT,
 				.output_value	= 1,
@@ -2003,7 +2003,7 @@ static int pm8058_gpios_init(void)
 			}
 		},
 		{ /* AMBER */
-			SHOOTER_AMBER_LED,
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_AMBER_LED),
 			{
 				.direction	= PM_GPIO_DIR_OUT,
 				.output_value	= 1,
@@ -2015,8 +2015,9 @@ static int pm8058_gpios_init(void)
 				.inv_int_pol	= 0,
 			}
 		},
+#ifdef CONFIG_MACH_SHOOTER
 		{ /* WIMAX HOST WAKEUP */
-			SHOOTER_WIMAX_HOST_WAKEUP,
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_WIMAX_HOST_WAKEUP),
 			{
 				.direction	= PM_GPIO_DIR_IN,
 				.output_value	= 0,
@@ -2026,8 +2027,9 @@ static int pm8058_gpios_init(void)
 				.inv_int_pol	= 0,
 			}
 		},
+#endif
 		{ /* 3D CLK */
-			SHOOTER_3DCLK,
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_3DCLK),
 			{
 				.direction	= PM_GPIO_DIR_OUT,
 				.output_value	= 0,
@@ -2040,7 +2042,7 @@ static int pm8058_gpios_init(void)
 			}
 		},
 		{ /* 3DLCM_PD */
-			SHOOTER_3DLCM_PD,
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_3DLCM_PD),
 			{
 				.direction	= PM_GPIO_DIR_OUT,
 				.output_value	= 0,
@@ -2053,7 +2055,7 @@ static int pm8058_gpios_init(void)
 			}
 		},
 		{ /* TORCH_SET1 for Flashlight */
-			SHOOTER_TORCH_SET1,
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_TORCH_SET1),
 			{
 				.direction	= PM_GPIO_DIR_OUT,
 				.output_value	= 0,
@@ -2066,7 +2068,7 @@ static int pm8058_gpios_init(void)
 			}
 		},
 		{ /* TORCH_SET2 for Flashlight */
-			SHOOTER_TORCH_SET2,
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_TORCH_SET2),
 			{
 				.direction	= PM_GPIO_DIR_OUT,
 				.output_value	= 0,
@@ -2079,7 +2081,7 @@ static int pm8058_gpios_init(void)
 			}
 		},
 		{
-			SHOOTER_AUD_REMO_EN,
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_REMO_EN),
 			{
 				.direction	= PM_GPIO_DIR_OUT,
 				.output_value	= 0,
@@ -2092,7 +2094,7 @@ static int pm8058_gpios_init(void)
 			}
 		},
 		{
-			SHOOTER_AUD_REMO_PRES,
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_REMO_PRES),
 			{
 				.direction      = PM_GPIO_DIR_IN,
 				.pull           = PM_GPIO_PULL_NO,
@@ -2107,8 +2109,8 @@ static int pm8058_gpios_init(void)
 		rc = pm8xxx_gpio_config(gpio_cfgs[i].gpio,
 				&gpio_cfgs[i].cfg);
 		if (rc < 0) {
-			pr_err("%s pmic gpio config failed\n",
-				__func__);
+			pr_err("%s pmic gpio config failed on element %d\n",
+				__func__, i);
 			return rc;
 		}
 	}
