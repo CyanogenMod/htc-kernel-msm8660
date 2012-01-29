@@ -2193,7 +2193,11 @@ static struct platform_device *devices[] __initdata = {
 #endif
 #if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)
 	&msm_gsbi1_qup_spi_device,
+#ifdef CONFIG_MACH_SHOOTER
 	&msm_gsbi2_qup_spi_device,
+#else
+	&msm_gsbi3_qup_spi_device,
+#endif
 #endif
 #ifdef CONFIG_MSM_SSBI
 	&msm_device_ssbi_pmic1,
@@ -2555,11 +2559,11 @@ static struct msm_spi_platform_data msm_gsbi1_qup_spi_pdata = {
 	.max_clock_speed = 10800000,
 };
 
+#ifdef CONFIG_MACH_SHOOTER
 static struct msm_spi_platform_data msm_gsbi2_qup_spi_pdata = {
-	.max_clock_speed = 15060000,
-};
-
+#else
 static struct msm_spi_platform_data msm_gsbi3_qup_spi_pdata = {
+#endif
 	.max_clock_speed = 15060000,
 };
 #endif
@@ -3359,10 +3363,11 @@ static void __init msm8x60_init_buses(void)
 #endif
 #if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)
 	msm_gsbi1_qup_spi_device.dev.platform_data = &msm_gsbi1_qup_spi_pdata;
-	if (machine_is_shooter())
-		msm_gsbi2_qup_spi_device.dev.platform_data = &msm_gsbi2_qup_spi_pdata;
-	else
-		msm_gsbi3_qup_spi_device.dev.platform_data = &msm_gsbi3_qup_spi_pdata;
+#ifdef CONFIG_MACH_SHOOTER
+	msm_gsbi2_qup_spi_device.dev.platform_data = &msm_gsbi2_qup_spi_pdata;
+#else
+	msm_gsbi3_qup_spi_device.dev.platform_data = &msm_gsbi3_qup_spi_pdata;
+#endif
 #endif
 #ifdef CONFIG_I2C_SSBI
 	msm_device_ssbi3.dev.platform_data = &msm_ssbi3_pdata;
