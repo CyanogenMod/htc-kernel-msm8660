@@ -76,6 +76,8 @@ struct led_classdev {
 #endif
 };
 
+extern void led_brightness_switch(char *,int state);
+
 extern int led_classdev_register(struct device *parent,
 				 struct led_classdev *led_cdev);
 extern void led_classdev_unregister(struct led_classdev *led_cdev);
