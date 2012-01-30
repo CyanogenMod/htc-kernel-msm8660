@@ -10,6 +10,7 @@
 
 #include <linux/bootmem.h>
 #include <linux/dma-mapping.h>
+#include <linux/i2c.h>
 #include <linux/msm_adc.h>
 #include <linux/msm-charger.h>
 #include <linux/m_adcproc.h>
@@ -25,6 +26,7 @@
 #include <asm/mach-types.h>
 #include <asm/hardware/gic.h>
 
+#include <linux/atmel_qt602240.h>
 #include <mach/board.h>
 #include <mach/board_htc.h>
 #include <mach/board-msm8660.h>
@@ -2108,6 +2110,181 @@ static struct msm_ssbi_platform_data msm8x60_ssbi_pm8058_pdata __devinitdata = {
 #endif
 #endif  /* CONFIG_PMIC8058 */
 
+static int shooter_ts_atmel_power(int on)
+{
+	pr_info("%s: power %d\n", __func__, on);
+
+	gpio_set_value(SHOOTER_TP_RST, 0);
+	msleep(5);
+	gpio_set_value(SHOOTER_TP_RST, 1);
+	msleep(40);
+
+	return 0;
+}
+
+struct atmel_i2c_platform_data shooter_ts_atmel_data[] = {
+	{
+		.version = 0x020,
+		.source = 1, /* ALPS, Nissha */
+		.abs_x_min = 5,
+		.abs_x_max = 1018,
+		.abs_y_min = 7,
+		.abs_y_max = 905,
+		.abs_pressure_min = 0,
+		.abs_pressure_max = 255,
+		.abs_width_min = 0,
+		.abs_width_max = 20,
+		.gpio_irq = SHOOTER_TP_ATT_N,
+		.power = shooter_ts_atmel_power,
+		.config_T6 = {0, 0, 0, 0, 0, 0},
+		.config_T7 = {16, 8, 50},
+		.config_T8 = {9, 0, 5, 2, 0, 0, 5, 15, 4, 170},
+		.config_T9 = {139, 0, 0, 20, 10, 0, 16, 30, 2, 1, 0, 2, 2, 0, 4, 14, 10, 10, 0, 0, 0, 0, 248, 228, 5, 5, 145, 50, 139, 80, 15, 10},
+		.config_T15 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T18 = {0, 0},
+		.config_T19 = {0, 0, 0, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T20 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T22 = {15, 0, 0, 0, 0, 0, 0, 0, 25, 0, 0, 0, 7, 18, 255, 255, 0},
+		.config_T23 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T24 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T25 = {3, 0, 16, 39, 124, 21, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T28 = {0, 0, 4, 4, 8, 60},
+		.object_crc = {0xC9, 0x30, 0x64},
+		.cable_config = {35, 25, 8, 16},
+		.noise_config = {45, 2, 35},
+		.GCAF_level = {20, 24, 28, 40, 63},
+	},
+	{
+		.version = 0x020,
+		.source = 0, /* TPK */
+		.abs_x_min = 5,
+		.abs_x_max = 1018,
+		.abs_y_min = 7,
+		.abs_y_max = 905,
+		.abs_pressure_min = 0,
+		.abs_pressure_max = 255,
+		.abs_width_min = 0,
+		.abs_width_max = 20,
+		.gpio_irq = SHOOTER_TP_ATT_N,
+		.power = shooter_ts_atmel_power,
+		.config_T6 = {0, 0, 0, 0, 0, 0},
+		.config_T7 = {16, 8, 50},
+		.config_T8 = {8, 0, 5, 2, 0, 0, 5, 15, 4, 170},
+		.config_T9 = {139, 0, 0, 20, 10, 0, 16, 30, 2, 1, 0, 2, 2, 0, 4, 14, 10, 10, 0, 0, 0, 0, 6, 0, 15, 14, 140, 43, 147, 77, 15, 10},
+		.config_T15 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T18 = {0, 0},
+		.config_T19 = {0, 0, 0, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T20 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T22 = {15, 0, 0, 0, 0, 0, 0, 0, 25, 0, 0, 0, 7, 18, 255, 255, 0},
+		.config_T23 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T24 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T25 = {3, 0, 16, 39, 124, 21, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T28 = {0, 0, 4, 4, 8, 60},
+		.object_crc = {0x4F, 0xEE, 0xF3},
+		.cable_config = {35, 25, 8, 16},
+		.noise_config = {45, 2, 35},
+		.GCAF_level = {20, 24, 28, 40, 63},
+	},
+	{
+		.version = 0x016,
+		.source = 1, /* ALPS, Nissha */
+		.abs_x_min = 5,
+		.abs_x_max = 1018,
+		.abs_y_min = 7,
+		.abs_y_max = 905,
+		.abs_pressure_min = 0,
+		.abs_pressure_max = 255,
+		.abs_width_min = 0,
+		.abs_width_max = 20,
+		.gpio_irq = SHOOTER_TP_ATT_N,
+		.power = shooter_ts_atmel_power,
+		.config_T6 = {0, 0, 0, 0, 0, 0},
+		.config_T7 = {16, 8, 50},
+		.config_T8 = {9, 0, 5, 2, 0, 0, 5, 15},
+		.config_T9 = {139, 0, 0, 20, 10, 0, 16, 30, 2, 1, 0, 2, 2, 0, 4, 14, 10, 10, 0, 0, 0, 0, 248, 228, 5, 5, 145, 50, 139, 80, 15},
+		.config_T15 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T18 = {0, 0},
+		.config_T19 = {0, 0, 0, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T20 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T22 = {15, 0, 0, 0, 0, 0, 0, 0, 25, 0, 0, 0, 7, 18, 255, 255, 0},
+		.config_T23 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T24 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T25 = {3, 0, 16, 39, 124, 21, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T27 = {0, 0, 0, 0, 0, 0, 0},
+		.config_T28 = {0, 0, 4, 4, 8, 60},
+		.cable_config = {35, 25, 8, 16},
+		.GCAF_level = {20, 24, 28, 40, 63},
+	},
+	{
+		.version = 0x016,
+		.source = 0, /* TPK */
+		.abs_x_min = 5,
+		.abs_x_max = 1018,
+		.abs_y_min = 7,
+		.abs_y_max = 905,
+		.abs_pressure_min = 0,
+		.abs_pressure_max = 255,
+		.abs_width_min = 0,
+		.abs_width_max = 20,
+		.gpio_irq = SHOOTER_TP_ATT_N,
+		.power = shooter_ts_atmel_power,
+		.config_T6 = {0, 0, 0, 0, 0, 0},
+		.config_T7 = {16, 8, 50},
+		.config_T8 = {8, 0, 5, 2, 0, 0, 5, 15},
+		.config_T9 = {139, 0, 0, 20, 10, 0, 16, 30, 2, 1, 0, 2, 2, 0, 4, 14, 10, 10, 0, 0, 0, 0, 6, 0, 15, 14, 140, 43, 147, 77, 15},
+		.config_T15 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T18 = {0, 0},
+		.config_T19 = {0, 0, 0, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T20 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T22 = {15, 0, 0, 0, 0, 0, 0, 0, 25, 0, 0, 0, 7, 18, 255, 255, 0},
+		.config_T23 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T24 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T25 = {3, 0, 16, 39, 124, 21, 0, 0, 0, 0, 0, 0, 0, 0},
+		.config_T27 = {0, 0, 0, 0, 0, 0, 0},
+		.config_T28 = {0, 0, 4, 4, 8, 60},
+		.cable_config = {35, 25, 8, 16},
+		.GCAF_level = {20, 24, 28, 40, 63},
+	},
+};
+
+static struct i2c_board_info msm_i2c_gsbi5_info[] = {
+	{
+		I2C_BOARD_INFO(ATMEL_QT602240_NAME, 0x94 >> 1),
+		.platform_data = &shooter_ts_atmel_data,
+		.irq = MSM_GPIO_TO_INT(SHOOTER_TP_ATT_N),
+	},
+};
+
+#ifdef CONFIG_I2C
+struct i2c_registry {
+	int                    bus;
+	struct i2c_board_info *info;
+	int                    len;
+};
+
+static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
+	{
+		MSM_GSBI5_QUP_I2C_BUS_ID,
+		msm_i2c_gsbi5_info,
+		ARRAY_SIZE(msm_i2c_gsbi5_info),
+	},
+};
+#endif /* CONFIG_I2C */
+
+static void register_i2c_devices(void)
+{
+#ifdef CONFIG_I2C
+	int i;
+
+	/* Run the array and install devices as appropriate */
+	for (i = 0; i < ARRAY_SIZE(msm8x60_i2c_devices); ++i) {
+		i2c_register_board_info(msm8x60_i2c_devices[i].bus,
+					msm8x60_i2c_devices[i].info,
+					msm8x60_i2c_devices[i].len);
+	}
+#endif
+}
+
 static struct platform_device *devices[] __initdata = {
 	&ram_console_device,
 	&msm_device_smd,
@@ -3397,6 +3574,7 @@ static void __init msm8x60_init(void)
 #ifdef CONFIG_USB_EHCI_MSM_72K
 	msm_add_host(0, &msm_usb_host_pdata);
 #endif
+	register_i2c_devices();
 	shooter_init_panel();
 	msm_pm_set_platform_data(msm_pm_data, ARRAY_SIZE(msm_pm_data));
 	msm_pm_set_rpm_wakeup_irq(RPM_SCSS_CPU0_WAKE_UP_IRQ);
