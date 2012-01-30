@@ -15,6 +15,7 @@
 
 #include <asm/io.h>
 #include <asm/mach-types.h>
+#include <linux/bootmem.h>
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/gpio.h>
@@ -30,7 +31,8 @@
 #include <mach/panel_id.h>
 #include <mach/msm_bus_board.h>
 #include <linux/mfd/pmic8058.h>
-#include <linux/leds-pm8058.h>
+//#include <linux/leds-pm8058.h>
+#include <mach/msm_memtypes.h>
 #include <linux/pwm.h>
 #include <linux/pmic8058-pwm.h>
 #include <linux/leds.h>
@@ -39,10 +41,27 @@
 #include "../devices.h"
 #include "../board-shooter.h"
 #include "../devices-msm8x60.h"
-#include "../../../../drivers/video/msm_8x60/mdp_hw.h"
-#include "../../../../drivers/video/msm_8x60/mipi_dsi.h"
+#include "../../../../drivers/video/msm/mdp_hw.h"
 
+//TODO START
+//     had linker issues when including the header below.
+//     haxed it up by bringing the needed stuff to board >_<
+//     FIXME doesnt effect anything that i can tell. but this
+//     is not how things need to be.
+//#include "../../../../drivers/video/msm/mipi_dsi.h"
 
+#define DTYPE_DCS_WRITE1	0x15	/* short write, 1 parameter */
+
+struct dsi_cmd_desc {
+	int dtype;
+	int last;
+	int vc;
+	int ack;	/* ask ACK from peripheral */
+	int wait;
+	int dlen;
+	char *payload;
+};
+//TODO END
 extern int panel_type;
 
 enum MODE_3D{
@@ -58,41 +77,41 @@ struct kset* uevent_kset;
 
 void mdp_color_enhancement(const struct mdp_reg *reg_seq, int size);
 
-static struct pm8058_gpio pwm_gpio_config = {
+static struct pm_gpio pwm_gpio_config = {
 		.direction	= PM_GPIO_DIR_OUT,
 		.output_value	= 0,
 		.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
 		.pull		= PM_GPIO_PULL_NO,
 		.out_strength	= PM_GPIO_STRENGTH_HIGH,
 		.function	= PM_GPIO_FUNC_NORMAL,
-		.vin_sel	= PM_GPIO_VIN_L5,
+		.vin_sel	= PM8058_GPIO_VIN_L5,
 		.inv_int_pol	= 0,
 };
 
-static struct pm8058_gpio clk_gpio_config_on = {
+static struct pm_gpio clk_gpio_config_on = {
 				.direction	= PM_GPIO_DIR_OUT,
 				.output_value	= 1,
 				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
 				.pull		= PM_GPIO_PULL_NO,
 				.out_strength	= PM_GPIO_STRENGTH_HIGH,
 				.function	= PM_GPIO_FUNC_2,
-				.vin_sel	= PM_GPIO_VIN_L5,
+				.vin_sel	= PM8058_GPIO_VIN_L5,
 				.inv_int_pol	= 0,
 };
 
-static struct pm8058_gpio clk_gpio_config_off = {
+static struct pm_gpio clk_gpio_config_off = {
 				.direction	= PM_GPIO_DIR_OUT,
 				.output_value	= 0,
 				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
 				.pull		= PM_GPIO_PULL_NO,
 				.out_strength	= PM_GPIO_STRENGTH_HIGH,
 				.function	= PM_GPIO_FUNC_NORMAL,
-				.vin_sel	= PM_GPIO_VIN_L5,
+				.vin_sel	= PM8058_GPIO_VIN_L5,
 				.inv_int_pol	= 0,
 };
 
 /*
-TODO:
+TODO: HTC
 1. move regulator initialization to shooter_panel_init()
 */
 static struct regulator *l12_3v;
@@ -124,14 +143,15 @@ static void shooter_panel_power(int onoff)
 		}
 
 		if(isorise == 0)
-			ret = regulator_set_voltage(l12_3v, 3000000, 3000000);
+			ret = regulator_set_voltage(l12_3v, 2900000, 2900000);
 		else
-			ret = regulator_set_voltage(l12_3v, 3200000, 3200000);
+			ret = regulator_set_voltage(l12_3v, 2900000, 2900000);
 		if (ret) {
 			pr_err("%s: error setting l12_3v voltage\n", __func__);
 			goto fail;
 		}
-
+//TODO forced backlight non to be sure its not an issue.revert when working right
+	led_brightness_switch("lcd-backlight", 255);
 		/* LCM Reset */
 		rc = gpio_request(GPIO_LCM_RST_N,
 			"LCM_RST_N");
@@ -162,7 +182,7 @@ static void shooter_panel_power(int onoff)
 					" l12_3v\n", __func__);
 			return;
 		}
-		hr_msleep(1);
+		msleep(1);
 
 		if (regulator_enable(lvs1_1v8)) {
 			pr_err("%s: Unable to enable the regulator:"
@@ -174,28 +194,28 @@ static void shooter_panel_power(int onoff)
 			return;
 		} else {
 			if(isorise == 0)
-				hr_msleep(10);
+				msleep(10);
 			else
-				hr_msleep(1);
+				msleep(1);
 			gpio_set_value(GPIO_LCM_RST_N, 1);
-			hr_msleep(1);
+			msleep(1);
 			gpio_set_value(GPIO_LCM_RST_N, 0);
-			hr_msleep(1);
+			msleep(1);
 			gpio_set_value(GPIO_LCM_RST_N, 1);
 			if(isorise == 0)
-				hr_msleep(10);
+				msleep(10);
 			else
-				hr_msleep(1);
+				msleep(1);
 		}
 	} else {
 		gpio_set_value(GPIO_LCM_RST_N, 0);
-		hr_msleep(1);
+		msleep(1);
 		if (regulator_disable(lvs1_1v8)) {
 			pr_err("%s: Unable to enable the regulator:"
 					" lvs1_1v8\n", __func__);
 			return;
 		}
-		hr_msleep(1);
+		msleep(1);
 		if (regulator_disable(l12_3v)) {
 			pr_err("%s: Unable to enable the regulator:"
 					" l12_3v\n", __func__);
@@ -227,6 +247,110 @@ static int mipi_panel_power(int on)
 }
 
 #ifdef CONFIG_MSM_BUS_SCALING
+static struct msm_bus_vectors rotator_init_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_ROTATOR,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab = 0,
+		.ib = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_ROTATOR,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab = 0,
+		.ib = 0,
+	},
+};
+
+static struct msm_bus_vectors rotator_ui_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_ROTATOR,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = 0,
+		.ib  = 0,
+	},
+	{
+		.src = MSM_BUS_MASTER_ROTATOR,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = (1024 * 600 * 4 * 2 * 60),
+		.ib  = (1024 * 600 * 4 * 2 * 60 * 1.5),
+	},
+};
+
+static struct msm_bus_vectors rotator_vga_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_ROTATOR,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = (640 * 480 * 2 * 2 * 30),
+		.ib  = (640 * 480 * 2 * 2 * 30 * 1.5),
+	},
+	{
+		.src = MSM_BUS_MASTER_ROTATOR,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = (640 * 480 * 2 * 2 * 30),
+		.ib  = (640 * 480 * 2 * 2 * 30 * 1.5),
+	},
+};
+
+static struct msm_bus_vectors rotator_720p_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_ROTATOR,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = (1280 * 736 * 2 * 2 * 30),
+		.ib  = (1280 * 736 * 2 * 2 * 30 * 1.5),
+	},
+	{
+		.src = MSM_BUS_MASTER_ROTATOR,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = (1280 * 736 * 2 * 2 * 30),
+		.ib  = (1280 * 736 * 2 * 2 * 30 * 1.5),
+	},
+};
+
+static struct msm_bus_vectors rotator_1080p_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_ROTATOR,
+		.dst = MSM_BUS_SLAVE_SMI,
+		.ab  = (1920 * 1088 * 2 * 2 * 30),
+		.ib  = (1920 * 1088 * 2 * 2 * 30 * 1.5),
+	},
+	{
+		.src = MSM_BUS_MASTER_ROTATOR,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = (1920 * 1088 * 2 * 2 * 30),
+		.ib  = (1920 * 1088 * 2 * 2 * 30 * 1.5),
+	},
+};
+
+static struct msm_bus_paths rotator_bus_scale_usecases[] = {
+	{
+		ARRAY_SIZE(rotator_init_vectors),
+		rotator_init_vectors,
+	},
+	{
+		ARRAY_SIZE(rotator_ui_vectors),
+		rotator_ui_vectors,
+	},
+	{
+		ARRAY_SIZE(rotator_vga_vectors),
+		rotator_vga_vectors,
+	},
+	{
+		ARRAY_SIZE(rotator_720p_vectors),
+		rotator_720p_vectors,
+	},
+	{
+		ARRAY_SIZE(rotator_1080p_vectors),
+		rotator_1080p_vectors,
+	},
+};
+
+struct msm_bus_scale_pdata rotator_bus_scale_pdata = {
+	rotator_bus_scale_usecases,
+	ARRAY_SIZE(rotator_bus_scale_usecases),
+	.name = "rotator",
+};
+
 static struct msm_bus_vectors mdp_init_vectors[] = {
 	/* For now, 0th array entry is reserved.
 	 * Please leave 0 as is and don't use it
@@ -533,18 +657,38 @@ static int msm_fb_detect_panel(const char *name)
 
 static struct msm_fb_platform_data msm_fb_pdata = {
 	.detect_client = msm_fb_detect_panel,
-	.blt_mode = 1,
-	.width = 53,
-	.height = 95,
+//	.blt_mode = 1,
+//	.width = 53,
+//	.height = 95,
+};
+
+static struct resource msm_fb_resources[] = {
+	{
+		.flags  = IORESOURCE_DMA,
+	}
 };
 
 static struct platform_device msm_fb_device = {
 	.name   = "msm_fb",
 	.id     = 0,
-	//.num_resources     = ARRAY_SIZE(msm_fb_resources),
-	//.resource          = msm_fb_resources,
+	.num_resources     = ARRAY_SIZE(msm_fb_resources),
+	.resource          = msm_fb_resources,
 	.dev.platform_data = &msm_fb_pdata,
 };
+
+void __init msm8x60_allocate_fb_region(void)
+{
+	void *addr;
+	unsigned long size;
+
+	size = MSM_FB_SIZE;
+	addr = alloc_bootmem_align(size, 0x1000);
+	msm_fb_resources[0].start = __pa(addr);
+	msm_fb_resources[0].end = msm_fb_resources[0].start + size - 1;
+	pr_info("allocating %lu bytes at %p (%lx physical) for fb\n",
+		size, addr, __pa(addr));
+
+}
 
 int mdp_core_clk_rate_table[] = {
        85330000,
@@ -1123,6 +1267,12 @@ static struct msm_panel_common_pdata mdp_pdata = {
 #ifdef CONFIG_MSM_BUS_SCALING
 	.mdp_bus_scale_table = &mdp_bus_scale_pdata,
 #endif
+	.mdp_rev = MDP_REV_41,
+#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+	.mem_hid = ION_CP_WB_HEAP_ID,
+#else
+	.mem_hid = MEMTYPE_EBI1,
+#endif
 	.mdp_color_enhance = shooter_mdp_color_enhance,
 	.mdp_gamma = shooter_mdp_gamma,
 };
@@ -1140,14 +1290,12 @@ static void __init msm_fb_add_devices(void)
 }
 
 /*
-TODO:
+TODO: HTC
 1.find a better way to handle msm_fb_resources, to avoid passing it across file.
 2.error handling
  */
-int __init shooter_init_panel(struct resource *res, size_t size)
+void __init shooter_init_panel(void)
 {
-	int ret=0;
-
 	if(panel_type == 	PANEL_ID_SHR_SHARP_OTM ||
 		panel_type == 	PANEL_ID_SHR_SHARP_OTM_C2)
 		mipi_dsi_cmd_sharp_qhd_panel_device.name = "mipi_orise";
@@ -1156,20 +1304,20 @@ int __init shooter_init_panel(struct resource *res, size_t size)
 
 	mipi_novatek_panel_data.shrink_pwm = shooter_shrink_pwm;
 
-	msm_fb_device.resource = res;
-	msm_fb_device.num_resources = size;
-
-	ret = platform_device_register(&msm_fb_device);
-	ret = platform_device_register(&mipi_dsi_cmd_sharp_qhd_panel_device);
+	platform_device_register(&msm_fb_device);
+	platform_device_register(&mipi_dsi_cmd_sharp_qhd_panel_device);
 
 	msm_fb_add_devices();
-
-	return 0;
 }
+ //TODO moar header kanging 
+#define	PM_PWM_PREDIVIDE_2	0
+#define	PM_PWM_PREDIVIDE_3	1
+#define	PM_PWM_PREDIVIDE_5	2
+#define	PM_PWM_PREDIVIDE_6	3
 
 static void shooter_3Dpanel_on(bool bLandscape)
 {
-	struct pw8058_pwm_config pwm_conf;
+	struct pm8058_pwm_period pwm_conf;
 	int rc;
 
 	if (mipi_novatek_panel_data.mipi_send_cmds) {
@@ -1179,12 +1327,12 @@ static void shooter_3Dpanel_on(bool bLandscape)
 
 	if(system_rev >= 1) {
 		pwm_gpio_config.output_value = 1;
-		rc = pm8058_gpio_config(SHOOTER_3DLCM_PD, &pwm_gpio_config);
+		rc = pm8xxx_gpio_config(SHOOTER_3DLCM_PD, &pwm_gpio_config);
 		if (rc < 0)
 			pr_err("%s pmic gpio config gpio %d failed\n", __func__, SHOOTER_3DLCM_PD);
 	}
 
-	rc = pm8058_gpio_config(SHOOTER_3DCLK, &clk_gpio_config_on);
+	rc = pm8xxx_gpio_config(SHOOTER_3DCLK, &clk_gpio_config_on);
 	if (rc < 0)
 		pr_err("%s pmic gpio config gpio %d failed\n", __func__, SHOOTER_3DCLK);
 
@@ -1193,9 +1341,10 @@ static void shooter_3Dpanel_on(bool bLandscape)
 	pwm_conf.clk = PM_PWM_CLK_19P2MHZ;
 	pwm_conf.pre_div = PM_PWM_PREDIVIDE_3;
 	pwm_conf.pre_div_exp = 6;
-	pwm_conf.pwm_value = 255;
-	pwm_conf.bypass_lut = 1;
-	pwm_configure(pwm_3d, &pwm_conf);
+//TODO fix these. prolly why backlight doesnt come on less forced along with other things >_<
+//	pwm_conf.pwm_value = 255;
+//	pwm_conf.bypass_lut = 1;
+//	pwm_configure(pwm_3d, &pwm_conf);
 	pwm_enable(pwm_3d);
 
 	if(bLandscape) {
@@ -1211,6 +1360,7 @@ static void shooter_3Dpanel_on(bool bLandscape)
 		gpio_set_value(SHOOTER_CTL_3D_3, 0);
 		gpio_set_value(SHOOTER_CTL_3D_4, 1);
 	}
+
 }
 
 static void shooter_3Dpanel_off(void)
@@ -1223,14 +1373,14 @@ static void shooter_3Dpanel_off(void)
 
 	if(system_rev >= 1) {
 		pwm_gpio_config.output_value = 0;
-		rc = pm8058_gpio_config(SHOOTER_3DLCM_PD, &pwm_gpio_config);
+		rc = pm8xxx_gpio_config(SHOOTER_3DLCM_PD, &pwm_gpio_config);
 		if (rc < 0)
 			pr_err("%s pmic gpio config gpio %d failed\n", __func__, SHOOTER_3DLCM_PD);
 	}
 	mdp_color_enhancement(mdp_sharp_barrier_off, ARRAY_SIZE(mdp_sharp_barrier_off));
 	pwm_disable(pwm_3d);
 
-	rc = pm8058_gpio_config(SHOOTER_3DCLK, &clk_gpio_config_off);
+	rc = pm8xxx_gpio_config(SHOOTER_3DCLK, &clk_gpio_config_off);
 	if (rc < 0)
 		pr_err("%s pmic gpio config gpio %d failed\n", __func__, SHOOTER_3DCLK);
 	gpio_set_value(SHOOTER_CTL_3D_1, 0);
@@ -1330,4 +1480,3 @@ static void __exit shooter_3Dpanel_exit(void)
 
 module_init(shooter_3Dpanel_init);
 module_exit(shooter_3Dpanel_exit);
-

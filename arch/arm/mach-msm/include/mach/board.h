@@ -305,6 +305,7 @@ enum msm_mdp_hw_revision {
 	MDP_REV_42,
 };
 
+struct dsi_cmd_desc;
 struct msm_panel_common_pdata {
 	uintptr_t hw_revision_addr;
 	int gpio;
@@ -317,9 +318,14 @@ struct msm_panel_common_pdata {
 	int mdp_core_clk_rate;
 	unsigned num_mdp_clk;
 	int *mdp_core_clk_table;
+	unsigned char (*shrink_pwm)(int val);
 #ifdef CONFIG_MSM_BUS_SCALING
 	struct msm_bus_scale_pdata *mdp_bus_scale_table;
 #endif
+	int (*mdp_color_enhance)(void);
+	int (*mdp_gamma)(void);
+	int (*mipi_send_cmds)(struct dsi_cmd_desc *cmds, uint32_t len);
+
 	int mdp_rev;
 	u32 ov0_wb_size;  /* overlay0 writeback size */
 	u32 ov1_wb_size;  /* overlay1 writeback size */
