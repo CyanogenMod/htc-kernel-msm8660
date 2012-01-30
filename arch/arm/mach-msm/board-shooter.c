@@ -87,10 +87,6 @@ struct pm8xxx_mpp_init_info {
 
 unsigned engineerid, mem_size_mb;
 
-#define MSM_SHARED_RAM_PHYS		0x40000000
-#define MSM_RAM_CONSOLE_BASE		0x40300000
-#define MSM_RAM_CONSOLE_SIZE		(SZ_1M - SZ_128K)
-
 static struct resource ram_console_resources[] = {
 	{
 		.start  = MSM_RAM_CONSOLE_BASE,
@@ -152,74 +148,6 @@ static struct platform_device msm_gemini_device = {
 	.resource       = msm_gemini_resources,
 	.num_resources  = ARRAY_SIZE(msm_gemini_resources),
 };
-#endif
-
-#ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
-#define MSM_FB_PRIM_BUF_SIZE (1024 * 600 * 4 * 3) /* 4 bpp x 3 pages */
-#else
-#define MSM_FB_PRIM_BUF_SIZE (1024 * 600 * 4 * 2) /* 4 bpp x 2 pages */
-#endif
-
-#ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
-#define MSM_FB_EXT_BUF_SIZE  (1920 * 1080 * 2 * 1) /* 2 bpp x 1 page */
-#elif defined(CONFIG_FB_MSM_TVOUT)
-#define MSM_FB_EXT_BUF_SIZE  (720 * 576 * 2 * 2) /* 2 bpp x 2 pages */
-#else
-#define MSM_FB_EXT_BUFT_SIZE	0
-#endif
-
-#ifdef CONFIG_FB_MSM_HDMI_AS_PRIMARY
-/* 4 bpp x 2 page HDMI case */
-#define MSM_FB_SIZE roundup((1920 * 1088 * 4 * 2), 4096)
-#else
-/* Note: must be multiple of 4096 */
-#define MSM_FB_SIZE roundup(MSM_FB_PRIM_BUF_SIZE + MSM_FB_EXT_BUF_SIZE + \
-				MSM_FB_DSUB_PMEM_ADDER, 4096)
-#endif
-
-#ifdef CONFIG_FB_MSM_HDMI_AS_PRIMARY
-#define MSM_PMEM_SF_SIZE 0x8000000 /* 128 Mbytes */
-#else
-#define MSM_PMEM_SF_SIZE 0x4000000 /* 64 Mbytes */
-#endif
-
-#ifdef CONFIG_FB_MSM_OVERLAY0_WRITEBACK
-#define MSM_FB_OVERLAY0_WRITEBACK_SIZE roundup((1376 * 768 * 3 * 2), 4096)
-#else
-#define MSM_FB_OVERLAY0_WRITEBACK_SIZE (0)
-#endif  /* CONFIG_FB_MSM_OVERLAY0_WRITEBACK */
-
-#ifdef CONFIG_FB_MSM_OVERLAY1_WRITEBACK
-#define MSM_FB_OVERLAY1_WRITEBACK_SIZE roundup((1920 * 1088 * 3 * 2), 4096)
-#else
-#define MSM_FB_OVERLAY1_WRITEBACK_SIZE (0)
-#endif  /* CONFIG_FB_MSM_OVERLAY1_WRITEBACK */
-
-#define MSM_PMEM_KERNEL_EBI1_SIZE  0x600000
-#define MSM_PMEM_ADSP_SIZE         0x2000000
-#define MSM_PMEM_AUDIO_SIZE        0x28B000
-
-#define MSM_SMI_BASE          0x38000000
-#define MSM_SMI_SIZE          0x4000000
-
-#define KERNEL_SMI_BASE       (MSM_SMI_BASE)
-#define KERNEL_SMI_SIZE       0x600000
-
-#define USER_SMI_BASE         (KERNEL_SMI_BASE + KERNEL_SMI_SIZE)
-#define USER_SMI_SIZE         (MSM_SMI_SIZE - KERNEL_SMI_SIZE)
-#define MSM_PMEM_SMIPOOL_SIZE USER_SMI_SIZE
-
-#define MSM_ION_SF_SIZE		0x1800000 /* 24MB */
-#define MSM_ION_CAMERA_SIZE     MSM_PMEM_ADSP_SIZE
-#define MSM_ION_MM_FW_SIZE	0x200000 /* (2MB) */
-#define MSM_ION_MM_SIZE		0x3600000 /* (54MB) */
-#define MSM_ION_MFC_SIZE	SZ_8K
-#define MSM_ION_WB_SIZE		0x600000 /* 6MB */
-
-#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
-#define MSM_ION_HEAP_NUM	7
-#else
-#define MSM_ION_HEAP_NUM	1
 #endif
 
 static unsigned fb_size;
@@ -2184,9 +2112,9 @@ static struct platform_device *devices[] __initdata = {
 	&ram_console_device,
 	&msm_device_smd,
 	&msm_device_uart_dm12,
-	&msm_pil_q6v3,
-	&msm_pil_modem,
-	&msm_pil_tzapps,
+//	&msm_pil_q6v3,
+//	&msm_pil_modem,
+//	&msm_pil_tzapps,
 #ifdef CONFIG_I2C_QUP
 	&msm_gsbi4_qup_i2c_device,
 	&msm_gsbi5_qup_i2c_device,
@@ -3469,7 +3397,7 @@ static void __init msm8x60_init(void)
 #ifdef CONFIG_USB_EHCI_MSM_72K
 	msm_add_host(0, &msm_usb_host_pdata);
 #endif
-
+	shooter_init_panel();
 	msm_pm_set_platform_data(msm_pm_data, ARRAY_SIZE(msm_pm_data));
 	msm_pm_set_rpm_wakeup_irq(RPM_SCSS_CPU0_WAKE_UP_IRQ);
 	msm_cpuidle_set_states(msm_cstates, ARRAY_SIZE(msm_cstates),
@@ -3477,6 +3405,11 @@ static void __init msm8x60_init(void)
 	BUG_ON(msm_pm_boot_init(&msm_pm_boot_pdata));
 
 	pm8058_gpios_init();
+}
+
+static void __init msm8x60_init_early(void)
+{
+	msm8x60_allocate_fb_region();
 }
 
 static void __init shooter_fixup(struct machine_desc *desc, struct tag *tags,
@@ -3500,7 +3433,7 @@ MACHINE_START(SHOOTER, "HTC Evo 3D CDMA")
 	.handle_irq = gic_handle_irq,
 	.init_machine = msm8x60_init,
 	.timer = &msm_timer,
-//	.init_early = msm8x60_init_early,
+	.init_early = msm8x60_init_early,
 MACHINE_END
 
 MACHINE_START(SHOOTER_U, "HTC Evo 3D GSM")
@@ -3511,5 +3444,5 @@ MACHINE_START(SHOOTER_U, "HTC Evo 3D GSM")
 	.handle_irq = gic_handle_irq,
 	.init_machine = msm8x60_init,
 	.timer = &msm_timer,
-//	.init_early = msm8x60_init_early,
+	.init_early = msm8x60_init_early,
 MACHINE_END
