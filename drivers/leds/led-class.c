@@ -26,6 +26,22 @@
 
 static struct class *leds_class;
 
+void led_brightness_switch(char *led_name, int state)
+{
+	struct led_classdev *led_cdev;
+
+	if (!led_name)
+		return;
+
+        down_read(&leds_list_lock);
+        list_for_each_entry(led_cdev, &leds_list, node) {
+                if (!strcmp(led_name, led_cdev->name))
+			led_set_brightness(led_cdev, state);
+        }
+        up_read(&leds_list_lock);
+}
+EXPORT_SYMBOL_GPL(led_brightness_switch);
+
 static void led_update_brightness(struct led_classdev *led_cdev)
 {
 	if (led_cdev->brightness_get)
