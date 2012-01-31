@@ -3676,6 +3676,8 @@ static void __init msm8x60_init(void)
 	BUG_ON(msm_pm_boot_init(&msm_pm_boot_pdata));
 
 	pm8058_gpios_init();
+
+	shooter_add_input_devices();
 }
 
 static void __init msm8x60_init_early(void)
