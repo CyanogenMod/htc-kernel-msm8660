@@ -3553,6 +3553,34 @@ static void __init msm8x60_init_mmc(void)
 #endif
 }
 
+static ssize_t shooter_virtual_keys_show(struct kobject *kobj,
+			struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf,
+		__stringify(EV_KEY) ":" __stringify(KEY_HOME)   ":70:1020:90:90"
+		":" __stringify(EV_KEY) ":" __stringify(KEY_MENU)   ":190:1020:100:90"
+		":" __stringify(EV_KEY) ":" __stringify(KEY_BACK)   ":345:1020:100:90"
+		":" __stringify(EV_KEY) ":" __stringify(KEY_SEARCH) ":468:1020:90:90"
+		"\n");
+}
+
+static struct kobj_attribute shooter_virtual_keys_attr = {
+	.attr = {
+		.name = "virtualkeys.atmel-touchscreen",
+		.mode = S_IRUGO,
+	},
+	.show = &shooter_virtual_keys_show,
+};
+
+static struct attribute *shooter_properties_attrs[] = {
+	&shooter_virtual_keys_attr.attr,
+	NULL
+};
+
+static struct attribute_group shooter_properties_attr_group = {
+	.attrs = shooter_properties_attrs,
+};
+
 static void __init msm8x60_init_buses(void)
 {
 #ifdef CONFIG_I2C_QUP
@@ -3612,6 +3640,9 @@ static void __init msm8x60_init_buses(void)
 
 static void __init msm8x60_init(void)
 {
+	int rc = 0;
+	struct kobject *properties_kobj;
+
 	pmic_reset_irq = PM8058_IRQ_BASE + PM8058_RESOUT_IRQ;
 
 	/*
@@ -3677,7 +3708,14 @@ static void __init msm8x60_init(void)
 
 	pm8058_gpios_init();
 
-	shooter_add_input_devices();
+	shooter_init_keypad();
+
+	properties_kobj = kobject_create_and_add("board_properties", NULL);
+	if (properties_kobj)
+		rc = sysfs_create_group(properties_kobj,
+                                &shooter_properties_attr_group);
+	if (!properties_kobj || rc)
+		pr_err("failed to create board_properties\n");
 }
 
 static void __init msm8x60_init_early(void)

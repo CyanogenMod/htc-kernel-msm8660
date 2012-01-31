@@ -14,27 +14,10 @@
  */
 
 #include <linux/platform_device.h>
-#include <linux/input.h>
-#include <linux/interrupt.h>
 #include <linux/gpio_event.h>
-#include <linux/keyreset.h>
-#include <asm/mach-types.h>
 #include <linux/gpio.h>
 #include <mach/gpio.h>
-
 #include "board-shooter.h"
-
-#include <linux/mfd/pmic8058.h>
-#include <linux/input/pmic8xxx-keypad.h>
-
-static char *keycaps = "--qwerty";
-#undef MODULE_PARAM_PREFIX
-#ifdef CONFIG_MACH_SHOOTER
-#define MODULE_PARAM_PREFIX "board_shooter."
-#else
-#define MODULE_PARAM_PREFIX "board_shooter_u."
-#endif
-module_param_named(keycaps, keycaps, charp, 0);
 
 static struct gpio_event_direct_entry shooter_keypad_switch_map[] = {
 	{ SHOOTER_GPIO_KEY_POWER, 	KEY_POWER		},
@@ -82,7 +65,7 @@ static int shooter_gpio_keypad_power(
 };
 
 static struct gpio_event_platform_data shooter_keypad_data = {
-	.name = "gpio-side-keypad",
+	.name = "shooter-keypad",
 	.info = shooter_keypad_info,
 	.info_count = ARRAY_SIZE(shooter_keypad_info),
 	.power = shooter_gpio_keypad_power,
@@ -100,7 +83,7 @@ static struct platform_device *shooter_input_devices[] __initdata = {
 	&shooter_gpio_keypad_device,
 };
 
-void __init shooter_add_input_devices(void)
+void __init shooter_init_keypad(void)
 {
 	shooter_gpio_event_input_init();
 	platform_add_devices(shooter_input_devices, ARRAY_SIZE(shooter_input_devices));
