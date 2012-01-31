@@ -2625,14 +2625,17 @@ static void __init reserve_pmem_memory(void)
 #endif
 }
 
-//static void __init reserve_mdp_memory(void);
+static void __init reserve_mdp_memory(void)
+{
+	msm8x60_mdp_writeback(msm8x60_reserve_table);
+}
 
 static void __init msm8x60_calculate_reserve_sizes(void)
 {
 	size_pmem_devices();
 	reserve_pmem_memory();
 	reserve_ion_memory();
-//	reserve_mdp_memory();
+	reserve_mdp_memory();
 }
 
 static int msm8x60_paddr_to_memtype(unsigned int paddr)

@@ -16,6 +16,7 @@
 #define __ARCH_ARM_MACH_MSM_BOARD_SHOOTER_H
 
 #include <mach/board.h>
+#include <mach/msm_memtypes.h>
 
 #ifdef CONFIG_MACH_SHOOTER
 #define SHOOTER_PROJECT_NAME	"shooter"
@@ -292,5 +293,6 @@ int __init shooter_init_keypad(void);
 int __init shooter_wifi_init(void);
 void __init shooter_init_panel(void);
 void msm8x60_allocate_fb_region(void);
+void msm8x60_mdp_writeback(struct memtype_reserve *reserve_table);
 
 #endif /* __ARCH_ARM_MACH_MSM_BOARD_SHOOTER_H */

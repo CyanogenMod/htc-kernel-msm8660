@@ -1277,6 +1277,18 @@ static struct msm_panel_common_pdata mdp_pdata = {
 	.mdp_gamma = shooter_mdp_gamma,
 };
 
+void __init msm8x60_mdp_writeback(struct memtype_reserve* reserve_table)
+{
+	mdp_pdata.ov0_wb_size = MSM_FB_OVERLAY0_WRITEBACK_SIZE;
+	mdp_pdata.ov1_wb_size = MSM_FB_OVERLAY1_WRITEBACK_SIZE;
+#if defined(CONFIG_ANDROID_PMEM) && !defined(CONFIG_MSM_MULTIMEDIA_USE_ION)
+	reserve_table[mdp_pdata.mem_hid].size +=
+		mdp_pdata.ov0_wb_size;
+	reserve_table[mdp_pdata.mem_hid].size +=
+		mdp_pdata.ov1_wb_size;
+#endif
+}
+
 static void __init msm_fb_add_devices(void)
 {
 	printk(KERN_INFO "panel ID= 0x%x\n", panel_type);
