@@ -67,3 +67,5 @@ obj-$(CONFIG_TZCOM) += tzcom.o
 obj-$(CONFIG_QFP_FUSE) += qfp_fuse.o
 
 obj-y				+= mpu3050/
+obj-$(CONFIG_INPUT_ISL29028)	+= isl29028.o
+obj-$(CONFIG_INPUT_ISL29029)	+= isl29029.o

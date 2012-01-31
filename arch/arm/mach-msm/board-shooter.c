@@ -33,6 +33,8 @@
 #include <mach/board-msm8660.h>
 #include <mach/cpuidle.h>
 #include <mach/gpiomux.h>
+#include <linux/isl29028.h>
+#include <linux/isl29029.h>
 #include <mach/msm_bus_board.h>
 #include <mach/msm_dsps.h>
 #include <mach/msm_hsusb.h>
@@ -2285,6 +2287,50 @@ static struct i2c_board_info __initdata mpu3050_GSBI10_boardinfo[] = {
 	},
 };
 
+static int isl29028_power(int pwr_device, uint8_t enable)
+{
+	return 0;
+};
+
+static struct isl29028_platform_data isl29028_pdata = {
+	.intr = PM8058_GPIO_PM_TO_SYS(SHOOTER_PS_VOUT),
+	.levels = {17, 79, 258, 588, 918, 1250, 1962, 2673, 3384, 4095},
+	.golden_adc = 0x4E2,
+	.power = isl29028_power,
+	.lt = 0x15,
+	.ht = 0x16,
+};
+
+static struct i2c_board_info i2c_isl29028_devices[] = {
+	{
+		I2C_BOARD_INFO(ISL29028_I2C_NAME, 0x8A >> 1),
+		.platform_data = &isl29028_pdata,
+		.irq = PM8058_GPIO_IRQ(PM8058_IRQ_BASE, SHOOTER_PS_VOUT),
+	},
+};
+
+static int isl29029_power(int pwr_device, uint8_t enable)
+{
+	return 0;
+};
+
+static struct isl29029_platform_data isl29029_pdata = {
+	.intr = PM8058_GPIO_PM_TO_SYS(SHOOTER_PS_VOUT),
+	.levels = {17, 79, 258, 588, 918, 1250, 1962, 2673, 3384, 4095},
+	.golden_adc = 0x4E2,
+	.power = isl29029_power,
+	.lt = 0x15,
+	.ht = 0x16,
+};
+
+static struct i2c_board_info i2c_isl29029_devices[] = {
+	{
+		I2C_BOARD_INFO(ISL29029_I2C_NAME, 0x8A >> 1),
+		.platform_data = &isl29029_pdata,
+		.irq = PM8058_GPIO_IRQ(PM8058_IRQ_BASE, SHOOTER_PS_VOUT),
+	},
+};
+
 #ifdef CONFIG_I2C
 struct i2c_registry {
 	int                    bus;
@@ -2315,6 +2361,17 @@ static void register_i2c_devices(void)
 
 	i2c_register_board_info(MSM_GSBI10_QUP_I2C_BUS_ID,
 		mpu3050_GSBI10_boardinfo, ARRAY_SIZE(mpu3050_GSBI10_boardinfo));
+
+	if (ps_type == 1) {
+		i2c_register_board_info(MSM_GSBI10_QUP_I2C_BUS_ID,
+			i2c_isl29028_devices,
+			ARRAY_SIZE(i2c_isl29028_devices));
+	} else if (ps_type == 2) {
+		i2c_register_board_info(MSM_GSBI10_QUP_I2C_BUS_ID,
+			i2c_isl29029_devices,
+			ARRAY_SIZE(i2c_isl29029_devices));
+	} else
+		printk(KERN_DEBUG "No Intersil chips\n");
 #endif
 }
 
