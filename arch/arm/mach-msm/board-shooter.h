@@ -289,10 +289,9 @@
 
 int __init shooter_init_mmc(void);
 void __init shooter_audio_init(void);
-int __init shooter_init_keypad(void);
+void __init shooter_init_keypad(void);
 int __init shooter_wifi_init(void);
 void __init shooter_init_panel(void);
-void __init shooter_add_input_devices(void);
 void msm8x60_allocate_fb_region(void);
 void msm8x60_mdp_writeback(struct memtype_reserve *reserve_table);
 
