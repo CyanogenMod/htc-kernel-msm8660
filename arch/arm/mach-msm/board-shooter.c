@@ -33,8 +33,11 @@
 #include <mach/board-msm8660.h>
 #include <mach/cpuidle.h>
 #include <mach/gpiomux.h>
+#include <mach/htc_battery_core.h>
+#include <mach/htc_battery_8x60.h>
 #include <linux/isl29028.h>
 #include <linux/isl29029.h>
+#include <mach/mpp.h>
 #include <mach/msm_bus_board.h>
 #include <mach/msm_dsps.h>
 #include <mach/msm_hsusb.h>
@@ -152,6 +155,29 @@ static struct platform_device msm_gemini_device = {
 	.name           = "msm_gemini",
 	.resource       = msm_gemini_resources,
 	.num_resources  = ARRAY_SIZE(msm_gemini_resources),
+};
+#endif
+
+#ifdef CONFIG_HTC_BATT8x60
+static struct htc_battery_platform_data htc_battery_pdev_data = {
+	.guage_driver = GUAGE_NONE,
+	.gpio_mbat_in = MSM_GPIO_TO_INT(SHOOTER_GPIO_MBAT_IN),
+	.gpio_mbat_in_trigger_level = MBAT_IN_HIGH_TRIGGER,
+	.charger = SWITCH_CHARGER_TPS65200,
+	.mpp_data = {
+		{XOADC_MPP_3, PM8XXX_MPP_AIN_AMUX_CH6},
+		{XOADC_MPP_5, PM8XXX_MPP_AIN_AMUX_CH6},
+		{XOADC_MPP_7, PM8XXX_MPP_AIN_AMUX_CH6},
+		{XOADC_MPP_8, PM8XXX_MPP_AIN_AMUX_CH6},
+	}
+};
+
+static struct platform_device htc_battery_pdev = {
+	.name = "htc_battery",
+	.id = -1,
+	.dev    = {
+		.platform_data = &htc_battery_pdev_data,
+	},
 };
 #endif
 
@@ -751,6 +777,7 @@ static struct msm_usb_host_platform_data msm_usb_host_pdata = {
 	.power_budget	= 390,
 };
 #endif
+
 #if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM_72K)
 static struct msm_otg_platform_data msm_otg_pdata = {
 	/* if usb link is in sps there is no need for
@@ -768,18 +795,10 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 #ifdef CONFIG_USB_EHCI_MSM_72K
 	.vbus_power = msm_hsusb_vbus_power,
 #endif
-#if 0
-def CONFIG_BATTERY_MSM8X60
-	.pmic_vbus_notif_init	= msm_hsusb_pmic_vbus_notif_init,
-#endif
 	.ldo_init		 = msm_hsusb_ldo_init,
 	.ldo_enable		 = msm_hsusb_ldo_enable,
 	.config_vddcx            = msm_hsusb_config_vddcx,
 	.init_vddcx              = msm_hsusb_init_vddcx,
-#if 0
-def CONFIG_BATTERY_MSM8X60
-	.chg_vbus_draw = msm_charger_vbus_draw,
-#endif
 };
 #endif
 
@@ -2441,6 +2460,9 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_vidc,
 #ifdef CONFIG_SENSORS_MSM_ADC
 	&msm_adc_device,
+#endif
+#ifdef CONFIG_HTC_BATT8x60
+	&htc_battery_pdev,
 #endif
 	&rpm_regulator_device,
 #ifdef CONFIG_HW_RANDOM_MSM
