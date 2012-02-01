@@ -35,11 +35,10 @@
 #include <linux/pmic8058-xoadc.h>
 //#include <linux/pmic8058-batt-alarm.h>
 #include <linux/mfd/pm8xxx/batt-alarm.h>
-#include <mach/mpp.h>
 #include <linux/android_alarm.h>
 #include <linux/suspend.h>
 #include <linux/earlysuspend.h>
-
+#define CONFIG_HTC_BATT_ALARM
 #define BATT_SUSPEND_CHECK_TIME			3600
 #define BATT_TIMER_CHECK_TIME			360
 
@@ -112,7 +111,7 @@ struct htc_battery_timer {
 static struct htc_battery_timer htc_batt_timer;
 
 static void cable_status_notifier_func(int online);
-static struct t_cable_status_notifier cable_status_notifier = {
+static struct t_usb_status_notifier usb_status_notifier = {
 	.name = "htc_battery_8x60",
 	.func = cable_status_notifier_func,
 };
@@ -495,7 +494,7 @@ static int32_t htc_batt_get_battery_adc(void)
 	u32 vref = 0;
 	u32 battid_adc = 0;
 	struct battery_adc_reply adc;
-
+#if 0
 	/* Read battery voltage adc data. */
 	ret = pm8058_htc_config_mpp_and_adc_read(
 			adc.adc_voltage,
@@ -530,7 +529,7 @@ static int32_t htc_batt_get_battery_adc(void)
 			CHANNEL_ADC_BATT_AMON,
 			htc_batt_info.mpp_config->battid[XOADC_MPP],
 			htc_batt_info.mpp_config->battid[PM_MPP_AIN_AMUX]);
-
+#endif
 	vref = htc_batt_getmidvalue(adc.adc_voltage);
 	battid_adc = htc_batt_getmidvalue(adc.adc_battid);
 
@@ -996,12 +995,13 @@ static int htc_battery_probe(struct platform_device *pdev)
 		tps_register_notifier(&tps_int_notifier);
 
 	pm8xxx_batt_alarm_register_notifier(&battery_alarm_notifier);
-
+/*
 	rc = pm8058_htc_config_mpp_and_adc_read(
 				htc_batt_info.adc_vref,
 				ADC_REPLY_ARRAY_SIZE,
 				CHANNEL_ADC_VCHG,
 				0, 0);
+*/
 	if (rc) {
 		BATT_ERR("Get Vref ADC value failed!");
 		goto fail;
@@ -1058,7 +1058,7 @@ static int __init htc_battery_init(void)
 #ifdef CONFIG_HTC_BATT_ALARM
 	mutex_init(&batt_set_alarm_lock);
 #endif
-	cable_detect_register_notifier(&cable_status_notifier);
+	usb_register_notifier(&usb_status_notifier);
 	platform_driver_register(&htc_battery_driver);
 
 	/* init battery parameters. */
