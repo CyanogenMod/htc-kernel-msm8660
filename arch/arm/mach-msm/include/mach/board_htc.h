@@ -71,6 +71,17 @@ int __init msm_add_serial_devices(unsigned uart);
 #if defined(CONFIG_USB_FUNCTION_MSM_HSUSB) \
 	|| defined(CONFIG_USB_MSM_72K) || defined(CONFIG_USB_MSM_72K_MODULE)
 
+enum usb_connect_type {
+	CONNECT_TYPE_CLEAR = -2,
+	CONNECT_TYPE_UNKNOWN = -1,
+	CONNECT_TYPE_NONE = 0,
+	CONNECT_TYPE_USB,
+	CONNECT_TYPE_AC,
+	CONNECT_TYPE_9V_AC,
+	CONNECT_TYPE_WIRELESS,
+	CONNECT_TYPE_INTERNAL,
+	CONNECT_TYPE_UNSUPPORTED,
+};
 struct t_usb_status_notifier{
 	struct list_head notifier_link;
 	const char *name;
