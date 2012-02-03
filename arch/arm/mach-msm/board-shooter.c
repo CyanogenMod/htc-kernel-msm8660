@@ -1857,6 +1857,7 @@ static struct pmic8058_leds_platform_data pm8058_flash_leds_data = {
 	.leds	= pmic8058_flash_leds,
 };
 
+#define PMIC_GPIO_SDC3_DET 34
 static int pm8058_gpios_init(void)
 {
 	int i;
@@ -2876,7 +2877,6 @@ static void __init msm8x60_init_ebi2(void)
 	}
 }
 
-#define PMIC_GPIO_SDC3_DET 34
 #define GPIO_SDC_WP (GPIO_EXPANDER_GPIO_BASE + (16 * 1) + 6)
 #if (defined(CONFIG_MMC_MSM_SDC1_SUPPORT)\
 	|| defined(CONFIG_MMC_MSM_SDC2_SUPPORT)\
