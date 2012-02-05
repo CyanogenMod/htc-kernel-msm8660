@@ -2397,9 +2397,9 @@ static struct platform_device *devices[] __initdata = {
 	&ram_console_device,
 	&msm_device_smd,
 	&msm_device_uart_dm12,
-//	&msm_pil_q6v3,
+	&msm_pil_q6v3,
 //	&msm_pil_modem,
-//	&msm_pil_tzapps,
+	&msm_pil_tzapps,
 #ifdef CONFIG_I2C_QUP
 	&msm_gsbi4_qup_i2c_device,
 	&msm_gsbi5_qup_i2c_device,
@@ -3575,6 +3575,24 @@ static void __init msm8x60_init_mmc(void)
 #endif
 }
 
+#ifdef CONFIG_MSM_DSPS
+#define DSPS_PIL_GENERIC_NAME		"dsps"
+
+static struct dsps_gpio_info dsps_gpios[] = {};
+
+static void __init msm8x60_init_dsps(void)
+{
+	struct msm_dsps_platform_data *pdata =
+		msm_dsps_device.dev.platform_data;
+
+	pdata->pil_name = DSPS_PIL_GENERIC_NAME;
+	pdata->gpios = dsps_gpios;
+	pdata->gpios_num = ARRAY_SIZE(dsps_gpios);
+
+	platform_device_register(&msm_dsps_device);
+}
+#endif /* CONFIG_MSM_DSPS */
+
 #ifdef CONFIG_MSM_RPM
 static struct msm_rpm_platform_data msm_rpm_data = {
 	.reg_base_addrs = {
@@ -3726,6 +3744,11 @@ static void __init msm8x60_init(void)
 	msm8x60_init_ebi2();
 	msm8x60_init_gpiomux(msm8x60_htc_gpiomux_cfgs);
 	msm8x60_init_mmc();
+
+
+#ifdef CONFIG_MSM_DSPS
+	msm8x60_init_dsps();
+#endif
 
 	pm8058_platform_data.leds_pdata = &pm8058_flash_leds_data;
 	pm8058_platform_data.vibrator_pdata = &pm8058_vib_pdata;
