@@ -2504,6 +2504,23 @@ static DEVICE_ATTR(chg_type, S_IRUSR, show_usb_chg_type, 0);
 static DEVICE_ATTR(chg_current, S_IWUSR | S_IRUSR,
 		show_usb_chg_current, store_usb_chg_current);
 
+#ifdef CONFIG_HTC_DEVICE
+static ssize_t show_usb_function_switch(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+
+static ssize_t store_usb_function_switch(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	return 0;
+}
+
+static DEVICE_ATTR(usb_function_switch, 0664,
+		show_usb_function_switch, store_usb_function_switch);
+#endif
+
 #ifdef CONFIG_USB_OTG
 static ssize_t store_host_req(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
@@ -2717,6 +2734,10 @@ int usb_gadget_probe_driver(struct usb_gadget_driver *driver,
 		dev_err(&ui->pdev->dev,
 			"failed to create sysfs entry(chg_current):"
 			"err:(%d)\n", retval);
+
+#ifdef CONFIG_HTC_DEVICE
+	retval = device_create_file(&ui->pdev->dev, &dev_attr_usb_function_switch);
+#endif
 
 	dev_dbg(&ui->pdev->dev, "registered gadget driver '%s'\n",
 			driver->driver.name);
