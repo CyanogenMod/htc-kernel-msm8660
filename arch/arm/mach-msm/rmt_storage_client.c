@@ -1656,6 +1656,8 @@ static uint32_t rmt_storage_get_sid(const char *path)
 		return RAMFS_MDM_STORAGE_ID;
 	if (!strncmp(path, "ssd", MAX_PATH_NAME))
 		return RAMFS_SSD_STORAGE_ID;
+	if (!strncmp(path, "/boot/radio_config", MAX_PATH_NAME))
+		return RAMFS_MODEMSTORAGE_ID;
 	return 0;
 }
 
