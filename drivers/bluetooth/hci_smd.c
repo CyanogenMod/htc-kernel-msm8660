@@ -2,7 +2,7 @@
  *  HCI_SMD (HCI Shared Memory Driver) is Qualcomm's Shared memory driver
  *  for the BT HCI protocol.
  *
- *  Copyright (c) 2000-2001, 2011 Code Aurora Forum. All rights reserved.
+ *  Copyright (c) 2000-2001, 2011-2012 Code Aurora Forum. All rights reserved.
  *  Copyright (C) 2002-2003  Maxim Krasnyansky <maxk@qualcomm.com>
  *  Copyright (C) 2004-2006  Marcel Holtmann <marcel@holtmann.org>
  *
@@ -25,6 +25,7 @@
 #include <linux/string.h>
 #include <linux/skbuff.h>
 #include <linux/wakelock.h>
+#include <linux/workqueue.h>
 #include <linux/uaccess.h>
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
@@ -33,7 +34,12 @@
 
 #define EVENT_CHANNEL		"APPS_RIVA_BT_CMD"
 #define DATA_CHANNEL		"APPS_RIVA_BT_ACL"
-#define RX_Q_MONITOR		(1)	/* 1 milli second */
+/* release wakelock in 500ms, not immediately, because higher layers
+ * don't always take wakelocks when they should
+ * This is derived from the implementation for UART transport
+ */
+
+#define RX_Q_MONITOR		(500)	/* 500 milli second */
 
 
 static int hcismd_set;
@@ -42,6 +48,7 @@ static DEFINE_MUTEX(hci_smd_enable);
 static int hcismd_set_enable(const char *val, struct kernel_param *kp);
 module_param_call(hcismd_set, hcismd_set_enable, NULL, &hcismd_set, 0644);
 
+static void hci_dev_restart(struct work_struct *worker);
 
 struct hci_smd_data {
 	struct hci_dev *hdev;
@@ -51,8 +58,7 @@ struct hci_smd_data {
 	struct wake_lock wake_lock_tx;
 	struct wake_lock wake_lock_rx;
 	struct timer_list rx_q_timer;
-	struct tasklet_struct hci_event_task;
-	struct tasklet_struct hci_data_task;
+	struct tasklet_struct rx_task;
 };
 static struct hci_smd_data hs;
 
@@ -129,111 +135,95 @@ static void hci_smd_destruct(struct hci_dev *hdev)
 		kfree(hdev->driver_data);
 }
 
-static void hci_smd_recv_data(unsigned long arg)
+static void hci_smd_recv_data(void)
 {
 	int len = 0;
 	int rc = 0;
 	struct sk_buff *skb = NULL;
-	unsigned  char *buf = NULL;
 	struct hci_smd_data *hsmd = &hs;
 	wake_lock(&hs.wake_lock_rx);
 
 	len = smd_read_avail(hsmd->data_channel);
 	if (len > HCI_MAX_FRAME_SIZE) {
-		BT_ERR("Frame larger than the allowed size");
+		BT_ERR("Frame larger than the allowed size, flushing frame");
+		smd_read(hsmd->data_channel, NULL, len);
 		goto out_data;
 	}
-	while (len > 0) {
-		skb = bt_skb_alloc(len, GFP_ATOMIC);
-		if (!skb) {
-			BT_ERR("Error in allocating  socket buffer");
-			goto out_data;
-		}
 
-		buf = kmalloc(len, GFP_ATOMIC);
-		if (!buf)  {
-			BT_ERR("Error in allocating  buffer");
-			rc = -ENOMEM;
-			goto out_data;
-		}
+	if (len <= 0)
+		goto out_data;
 
-		rc = smd_read(hsmd->data_channel, (void *)buf, len);
-		if (rc < len) {
-			BT_ERR("Error in reading from the channel");
-			goto out_data;
-		}
-
-		memcpy(skb_put(skb, len), buf, len);
-		skb->dev = (void *)hsmd->hdev;
-		bt_cb(skb)->pkt_type = HCI_ACLDATA_PKT;
-
-		skb_orphan(skb);
-
-		rc = hci_recv_frame(skb);
-		if (rc < 0) {
-			BT_ERR("Error in passing the packet to HCI Layer");
-			/*
-			 * skb is getting freed in hci_recv_frame, making it
-			 * to null to avoid multiple access
-			 */
-			skb = NULL;
-			goto out_data;
-		}
-
-		kfree(buf);
-		buf = NULL;
-		len = smd_read_avail(hsmd->data_channel);
-		/*
-		 * Start the timer to monitor whether the Rx queue is
-		 * empty for releasing the Rx wake lock
-		 */
-		BT_DBG("Rx Timer is starting");
-		mod_timer(&hsmd->rx_q_timer,
-				jiffies + msecs_to_jiffies(RX_Q_MONITOR));
+	skb = bt_skb_alloc(len, GFP_ATOMIC);
+	if (!skb) {
+		BT_ERR("Error in allocating socket buffer");
+		smd_read(hsmd->data_channel, NULL, len);
+		goto out_data;
 	}
+
+	rc = smd_read(hsmd->data_channel, skb_put(skb, len), len);
+	if (rc < len) {
+		BT_ERR("Error in reading from the channel");
+		goto out_data;
+	}
+
+	skb->dev = (void *)hsmd->hdev;
+	bt_cb(skb)->pkt_type = HCI_ACLDATA_PKT;
+	skb_orphan(skb);
+
+	rc = hci_recv_frame(skb);
+	if (rc < 0) {
+		BT_ERR("Error in passing the packet to HCI Layer");
+		/*
+		 * skb is getting freed in hci_recv_frame, making it
+		 * to null to avoid multiple access
+		 */
+		skb = NULL;
+		goto out_data;
+	}
+
+	/*
+	 * Start the timer to monitor whether the Rx queue is
+	 * empty for releasing the Rx wake lock
+	 */
+	BT_DBG("Rx Timer is starting");
+	mod_timer(&hsmd->rx_q_timer,
+			jiffies + msecs_to_jiffies(RX_Q_MONITOR));
+
 out_data:
 	release_lock();
-	if (rc) {
-		if (skb)
-			kfree_skb(skb);
-		kfree(buf);
-	}
+	if (rc)
+		kfree_skb(skb);
 }
 
-static void hci_smd_recv_event(unsigned long arg)
+static void hci_smd_recv_event(void)
 {
 	int len = 0;
 	int rc = 0;
 	struct sk_buff *skb = NULL;
-	unsigned  char *buf = NULL;
 	struct hci_smd_data *hsmd = &hs;
 	wake_lock(&hs.wake_lock_rx);
 
 	len = smd_read_avail(hsmd->event_channel);
 	if (len > HCI_MAX_FRAME_SIZE) {
-		BT_ERR("Frame larger than the allowed size");
+		BT_ERR("Frame larger than the allowed size, flushing frame");
+		rc = smd_read(hsmd->event_channel, NULL, len);
 		goto out_event;
 	}
 
 	while (len > 0) {
 		skb = bt_skb_alloc(len, GFP_ATOMIC);
 		if (!skb) {
-			BT_ERR("Error in allocating  socket buffer");
+			BT_ERR("Error in allocating socket buffer");
+			smd_read(hsmd->event_channel, NULL, len);
 			goto out_event;
 		}
-		buf = kmalloc(len, GFP_ATOMIC);
-		if (!buf) {
-			BT_ERR("Error in allocating  buffer");
-			rc = -ENOMEM;
-			goto out_event;
-		}
-		rc = smd_read(hsmd->event_channel, (void *)buf, len);
+
+		rc = smd_read(hsmd->event_channel, skb_put(skb, len), len);
 		if (rc < len) {
 			BT_ERR("Error in reading from the event channel");
 			goto out_event;
 		}
 
-		memcpy(skb_put(skb, len), buf, len);
 		skb->dev = (void *)hsmd->hdev;
 		bt_cb(skb)->pkt_type = HCI_EVENT_PKT;
 
@@ -250,8 +240,6 @@ static void hci_smd_recv_event(unsigned long arg)
 			goto out_event;
 		}
 
-		kfree(buf);
-		buf = NULL;
 		len = smd_read_avail(hsmd->event_channel);
 		/*
 		 * Start the timer to monitor whether the Rx queue is
@@ -263,11 +251,8 @@ static void hci_smd_recv_event(unsigned long arg)
 	}
 out_event:
 	release_lock();
-	if (rc) {
-		if (skb)
-			kfree_skb(skb);
-		kfree(buf);
-	}
+	if (rc)
+		kfree_skb(skb);
 }
 
 static int hci_smd_send_frame(struct sk_buff *skb)
@@ -314,11 +299,22 @@ static int hci_smd_send_frame(struct sk_buff *skb)
 	return ret;
 }
 
+static void hci_smd_rx(unsigned long arg)
+{
+	struct hci_smd_data *hsmd = &hs;
+
+	while ((smd_read_avail(hsmd->event_channel) > 0) ||
+				(smd_read_avail(hsmd->data_channel) > 0)) {
+		hci_smd_recv_event();
+		hci_smd_recv_data();
+	}
+}
 
 static void hci_smd_notify_event(void *data, unsigned int event)
 {
 	struct hci_dev *hdev = hs.hdev;
 	struct hci_smd_data *hsmd = &hs;
+	struct work_struct *reset_worker;
 	int len = 0;
 
 	if (!hdev) {
@@ -330,7 +326,7 @@ static void hci_smd_notify_event(void *data, unsigned int event)
 	case SMD_EVENT_DATA:
 		len = smd_read_avail(hsmd->event_channel);
 		if (len > 0)
-			tasklet_hi_schedule(&hs.hci_event_task);
+			tasklet_hi_schedule(&hs.rx_task);
 		else if (len < 0)
 			BT_ERR("Failed to read event from smd %d", len);
 
@@ -342,6 +338,13 @@ static void hci_smd_notify_event(void *data, unsigned int event)
 	case SMD_EVENT_CLOSE:
 		BT_INFO("Closing HCI-SMD channel :%s", EVENT_CHANNEL);
 		hci_smd_close(hdev);
+		reset_worker = kzalloc(sizeof(*reset_worker), GFP_ATOMIC);
+		if (!reset_worker) {
+			BT_ERR("Out of memory");
+			break;
+		}
+		INIT_WORK(reset_worker, hci_dev_restart);
+		schedule_work(reset_worker);
 		break;
 	default:
 		break;
@@ -355,7 +358,7 @@ static void hci_smd_notify_data(void *data, unsigned int event)
 	int len = 0;
 
 	if (!hdev) {
-		BT_ERR("HCI device (hdev=NULL)");
+		BT_ERR("Frame for unknown HCI device (hdev=NULL)");
 		return;
 	}
 
@@ -363,7 +366,7 @@ static void hci_smd_notify_data(void *data, unsigned int event)
 	case SMD_EVENT_DATA:
 		len = smd_read_avail(hsmd->data_channel);
 		if (len > 0)
-			tasklet_hi_schedule(&hs.hci_data_task);
+			tasklet_hi_schedule(&hs.rx_task);
 		else if (len < 0)
 			BT_ERR("Failed to read data from smd %d", len);
 		break;
@@ -402,10 +405,9 @@ static int hci_smd_register_dev(struct hci_smd_data *hsmd)
 	hdev->destruct = hci_smd_destruct;
 	hdev->owner = THIS_MODULE;
 
-	tasklet_init(&hsmd->hci_event_task,
-			hci_smd_recv_event, (unsigned long) hsmd);
-	tasklet_init(&hsmd->hci_data_task,
-			hci_smd_recv_data, (unsigned long) hsmd);
+
+	tasklet_init(&hsmd->rx_task,
+			hci_smd_rx, (unsigned long) hsmd);
 	/*
 	 * Setup the timer to monitor whether the Rx queue is empty,
 	 * to control the wake lock release
@@ -445,6 +447,8 @@ static int hci_smd_register_dev(struct hci_smd_data *hsmd)
 
 static void hci_smd_deregister_dev(struct hci_smd_data *hsmd)
 {
+	tasklet_kill(&hs.rx_task);
+
 	if (hsmd->hdev) {
 		if (hci_unregister_dev(hsmd->hdev) < 0)
 			BT_ERR("Can't unregister HCI device %s",
@@ -468,9 +472,15 @@ static void hci_smd_deregister_dev(struct hci_smd_data *hsmd)
 		hs.rx_q_timer.function = NULL;
 		hs.rx_q_timer.data = 0;
 	}
+}
 
-	tasklet_kill(&hs.hci_event_task);
-	tasklet_kill(&hs.hci_data_task);
+static void hci_dev_restart(struct work_struct *worker)
+{
+	mutex_lock(&hci_smd_enable);
+	hci_smd_deregister_dev(&hs);
+	hci_smd_register_dev(&hs);
+	mutex_unlock(&hci_smd_enable);
+	kfree(worker);
 }
 
 static int hcismd_set_enable(const char *val, struct kernel_param *kp)

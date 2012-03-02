@@ -55,7 +55,7 @@
 
 #define TABLA_EXT_CLK_RATE 12288000
 
-#define TABLA_MBHC_DEF_BUTTONS 3
+#define TABLA_MBHC_DEF_BUTTONS 8
 #define TABLA_MBHC_DEF_RLOADS 5
 
 static u32 top_spk_pamp_gpio  = PM8921_GPIO_PM_TO_SYS(18);
@@ -571,7 +571,7 @@ static void *def_tabla_mbhc_cal(void)
 	void *tabla_cal;
 	struct tabla_mbhc_btn_detect_cfg *btn_cfg;
 	u16 *btn_low, *btn_high;
-	u8 *n_cic, *gain;
+	u8 *n_ready, *n_cic, *gain;
 
 	tabla_cal = kzalloc(TABLA_MBHC_CAL_SIZE(TABLA_MBHC_DEF_BUTTONS,
 						TABLA_MBHC_DEF_RLOADS),
@@ -597,20 +597,16 @@ static void *def_tabla_mbhc_cal(void)
 #undef S
 #define S(X, Y) ((TABLA_MBHC_CAL_PLUG_TYPE_PTR(tabla_cal)->X) = (Y))
 	S(v_no_mic, 30);
-	S(v_hs_max, 1450);
+	S(v_hs_max, 1550);
 #undef S
 #define S(X, Y) ((TABLA_MBHC_CAL_BTN_DET_PTR(tabla_cal)->X) = (Y))
-	S(c[0], 6);
-	S(c[1], 10);
-	S(c[2], 10);
-	S(c[3], 14);
-	S(c[4], 14);
-	S(c[5], 16);
-	S(c[6], 0);
-	S(c[7], 0);
-	S(nc, 5);
-	S(n_meas, 11);
+	S(c[0], 62);
+	S(c[1], 124);
+	S(nc, 1);
+	S(n_meas, 3);
 	S(mbhc_nsc, 11);
+	S(n_btn_meas, 1);
+	S(n_btn_con, 2);
 	S(num_btn, TABLA_MBHC_DEF_BUTTONS);
 	S(v_btn_press_delta_sta, 100);
 	S(v_btn_press_delta_cic, 50);
@@ -618,15 +614,28 @@ static void *def_tabla_mbhc_cal(void)
 	btn_cfg = TABLA_MBHC_CAL_BTN_DET_PTR(tabla_cal);
 	btn_low = tabla_mbhc_cal_btn_det_mp(btn_cfg, TABLA_BTN_DET_V_BTN_LOW);
 	btn_high = tabla_mbhc_cal_btn_det_mp(btn_cfg, TABLA_BTN_DET_V_BTN_HIGH);
-	btn_low[0] = 0;
-	btn_high[0] = 40;
-	btn_low[1] = 60;
-	btn_high[1] = 140;
-	btn_low[2] = 160;
-	btn_high[2] = 240;
+	btn_low[0] = -50;
+	btn_high[0] = 10;
+	btn_low[1] = 11;
+	btn_high[1] = 38;
+	btn_low[2] = 39;
+	btn_high[2] = 64;
+	btn_low[3] = 65;
+	btn_high[3] = 91;
+	btn_low[4] = 92;
+	btn_high[4] = 115;
+	btn_low[5] = 116;
+	btn_high[5] = 141;
+	btn_low[6] = 142;
+	btn_high[6] = 163;
+	btn_low[7] = 164;
+	btn_high[7] = 250;
+	n_ready = tabla_mbhc_cal_btn_det_mp(btn_cfg, TABLA_BTN_DET_N_READY);
+	n_ready[0] = 48;
+	n_ready[1] = 38;
 	n_cic = tabla_mbhc_cal_btn_det_mp(btn_cfg, TABLA_BTN_DET_N_CIC);
-	n_cic[0] = 120;
-	n_cic[1] = 94;
+	n_cic[0] = 60;
+	n_cic[1] = 47;
 	gain = tabla_mbhc_cal_btn_det_mp(btn_cfg, TABLA_BTN_DET_GAIN);
 	gain[0] = 11;
 	gain[1] = 9;
@@ -668,15 +677,16 @@ static int msm8960_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_sync(dapm);
 
 	err = snd_soc_jack_new(codec, "Headset Jack",
-		(SND_JACK_HEADSET | SND_JACK_OC_HPHL | SND_JACK_OC_HPHR),
-		&hs_jack);
+			       (SND_JACK_HEADSET | SND_JACK_OC_HPHL |
+				SND_JACK_OC_HPHR),
+			       &hs_jack);
 	if (err) {
 		pr_err("failed to create new jack\n");
 		return err;
 	}
 
 	err = snd_soc_jack_new(codec, "Button Jack",
-				SND_JACK_BTN_0, &button_jack);
+			       TABLA_JACK_BUTTON_MASK, &button_jack);
 	if (err) {
 		pr_err("failed to create new jack\n");
 		return err;
@@ -706,7 +716,8 @@ static struct snd_soc_dsp_link fe_media = {
 	},
 };
 
-static struct snd_soc_dsp_link slimbus0_hl_media = {
+/* bi-directional media definition for hostless PCM device */
+static struct snd_soc_dsp_link bidir_hl_media = {
 	.playback = true,
 	.capture = true,
 	.trigger = {
@@ -715,9 +726,8 @@ static struct snd_soc_dsp_link slimbus0_hl_media = {
 	},
 };
 
-static struct snd_soc_dsp_link int_fm_hl_media = {
+static struct snd_soc_dsp_link hdmi_rx_hl = {
 	.playback = true,
-	.capture = true,
 	.trigger = {
 		SND_SOC_DSP_TRIGGER_POST,
 		SND_SOC_DSP_TRIGGER_POST
@@ -777,8 +787,10 @@ static int msm8960_hdmi_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	struct snd_interval *channels = hw_param_interval(params,
 					SNDRV_PCM_HW_PARAM_CHANNELS);
 
+	pr_debug("%s channels->min %u channels->max %u ()\n", __func__,
+			channels->min, channels->max);
+
 	rate->min = rate->max = 48000;
-	channels->min = channels->max = 2;
 
 	return 0;
 }
@@ -926,7 +938,7 @@ static struct snd_soc_dai_link msm8960_dai[] = {
 		.name = "MSM8960 Media2",
 		.stream_name = "MultiMedia2",
 		.cpu_dai_name	= "MultiMedia2",
-		.platform_name  = "msm-pcm-dsp",
+		.platform_name  = "msm-multi-ch-pcm-dsp",
 		.dynamic = 1,
 		.dsp_link = &fe_media,
 		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA2,
@@ -967,7 +979,7 @@ static struct snd_soc_dai_link msm8960_dai[] = {
 		.cpu_dai_name	= "SLIMBUS0_HOSTLESS",
 		.platform_name  = "msm-pcm-hostless",
 		.dynamic = 1,
-		.dsp_link = &slimbus0_hl_media,
+		.dsp_link = &bidir_hl_media,
 		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
 		.ignore_suspend = 1,
 		/* .be_id = do not care */
@@ -978,7 +990,7 @@ static struct snd_soc_dai_link msm8960_dai[] = {
 		.cpu_dai_name	= "INT_FM_HOSTLESS",
 		.platform_name  = "msm-pcm-hostless",
 		.dynamic = 1,
-		.dsp_link = &int_fm_hl_media,
+		.dsp_link = &bidir_hl_media,
 		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
 		.ignore_suspend = 1,
 		/* .be_id = do not care */
@@ -1009,6 +1021,28 @@ static struct snd_soc_dai_link msm8960_dai[] = {
 		.dynamic = 1,
 		.dsp_link = &lpa_fe_media,
 		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA4,
+	},
+	{
+		.name = "AUXPCM Hostless",
+		.stream_name = "AUXPCM Hostless",
+		.cpu_dai_name	= "AUXPCM_HOSTLESS",
+		.platform_name  = "msm-pcm-hostless",
+		.dynamic = 1,
+		.dsp_link = &bidir_hl_media,
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+	},
+	/* HDMI Hostless */
+	{
+		.name = "HDMI_RX_HOSTLESS",
+		.stream_name = "HDMI_RX_HOSTLESS",
+		.cpu_dai_name = "HDMI_HOSTLESS",
+		.platform_name = "msm-pcm-hostless",
+		.dynamic = 1,
+		.dsp_link = &hdmi_rx_hl,
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.no_codec = 1,
+		.ignore_suspend = 1,
 	},
 	/* Backend DAI Links */
 	{
@@ -1086,7 +1120,7 @@ static struct snd_soc_dai_link msm8960_dai[] = {
 	{
 		.name = LPASS_BE_HDMI,
 		.stream_name = "HDMI Playback",
-		.cpu_dai_name = "msm-dai-q6.8",
+		.cpu_dai_name = "msm-dai-q6-hdmi.8",
 		.platform_name = "msm-pcm-routing",
 		.codec_name     = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-rx",

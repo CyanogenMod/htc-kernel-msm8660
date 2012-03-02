@@ -10,25 +10,31 @@
  * GNU General Public License for more details.
  */
 #include <sound/soc.h>
-
-#define TABLA_VERSION_1_0	0
-#define TABLA_VERSION_1_1	1
-#define TABLA_VERSION_2_0	2
+#include <sound/jack.h>
 
 #define TABLA_NUM_REGISTERS 0x400
 #define TABLA_MAX_REGISTER (TABLA_NUM_REGISTERS-1)
 #define TABLA_CACHE_SIZE TABLA_NUM_REGISTERS
+#define TABLA_1_X_ONLY_REGISTERS 3
+#define TABLA_2_HIGHER_ONLY_REGISTERS 3
 
 #define TABLA_REG_VAL(reg, val)		{reg, 0, val}
 
-
+#define DEFAULT_DCE_STA_WAIT 55
 #define DEFAULT_DCE_WAIT 60000
 #define DEFAULT_STA_WAIT 5000
 
 #define STA 0
 #define DCE 1
 
+#define TABLA_JACK_BUTTON_MASK (SND_JACK_BTN_0 | SND_JACK_BTN_1 | \
+				SND_JACK_BTN_2 | SND_JACK_BTN_3 | \
+				SND_JACK_BTN_4 | SND_JACK_BTN_5 | \
+				SND_JACK_BTN_6 | SND_JACK_BTN_7)
+
 extern const u8 tabla_reg_readable[TABLA_CACHE_SIZE];
+extern const u32 tabla_1_reg_readable[TABLA_1_X_ONLY_REGISTERS];
+extern const u32 tabla_2_reg_readable[TABLA_2_HIGHER_ONLY_REGISTERS];
 extern const u8 tabla_reg_defaults[TABLA_CACHE_SIZE];
 
 enum tabla_micbias_num {
@@ -66,7 +72,7 @@ enum tabla_mbhc_analog_pwr_cfg {
 enum tabla_mbhc_btn_det_mem {
 	TABLA_BTN_DET_V_BTN_LOW,
 	TABLA_BTN_DET_V_BTN_HIGH,
-	TABLA_BTN_DET_V_N_READY,
+	TABLA_BTN_DET_N_READY,
 	TABLA_BTN_DET_N_CIC,
 	TABLA_BTN_DET_GAIN
 };

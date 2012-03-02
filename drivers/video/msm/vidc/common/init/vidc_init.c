@@ -31,9 +31,9 @@
 #include <mach/clk.h>
 #include <linux/pm_runtime.h>
 #include <mach/msm_subsystem_map.h>
-#include "vcd_api.h"
+#include <media/msm/vcd_api.h>
+#include <media/msm/vidc_init.h>
 #include "vidc_init_internal.h"
-#include "vidc_init.h"
 #include "vcd_res_tracker_api.h"
 
 #if DEBUG
@@ -364,6 +364,59 @@ void vidc_release_firmware(void)
 }
 EXPORT_SYMBOL(vidc_release_firmware);
 
+void vidc_cleanup_addr_table(struct video_client_ctx *client_ctx,
+				enum buffer_dir buffer)
+{
+	u32 *num_of_buffers = NULL;
+	u32 i = 0;
+	struct buf_addr_table *buf_addr_table;
+	if (buffer == BUFFER_TYPE_INPUT) {
+		buf_addr_table = client_ctx->input_buf_addr_table;
+		num_of_buffers = &client_ctx->num_of_input_buffers;
+		DBG("%s(): buffer = INPUT\n", __func__);
+
+	} else {
+		buf_addr_table = client_ctx->output_buf_addr_table;
+		num_of_buffers = &client_ctx->num_of_output_buffers;
+		DBG("%s(): buffer = OUTPUT\n", __func__);
+	}
+
+	if (!*num_of_buffers)
+		goto bail_out_cleanup;
+	if (!client_ctx->user_ion_client)
+		goto bail_out_cleanup;
+	for (i = 0; i < *num_of_buffers; ++i) {
+		if (buf_addr_table[i].client_data) {
+			msm_subsystem_unmap_buffer(
+			(struct msm_mapped_buffer *)
+			buf_addr_table[i].client_data);
+			buf_addr_table[i].client_data = NULL;
+		}
+		if (buf_addr_table[i].buff_ion_handle) {
+			ion_unmap_kernel(client_ctx->user_ion_client,
+					buf_addr_table[i].buff_ion_handle);
+			ion_free(client_ctx->user_ion_client,
+					buf_addr_table[i].buff_ion_handle);
+			buf_addr_table[i].buff_ion_handle = NULL;
+		}
+	}
+	if (client_ctx->vcd_h264_mv_buffer.client_data) {
+		msm_subsystem_unmap_buffer((struct msm_mapped_buffer *)
+		client_ctx->vcd_h264_mv_buffer.client_data);
+		client_ctx->vcd_h264_mv_buffer.client_data = NULL;
+	}
+	if (client_ctx->h264_mv_ion_handle) {
+		ion_unmap_kernel(client_ctx->user_ion_client,
+				client_ctx->h264_mv_ion_handle);
+		ion_free(client_ctx->user_ion_client,
+				client_ctx->h264_mv_ion_handle);
+		client_ctx->h264_mv_ion_handle = NULL;
+	}
+bail_out_cleanup:
+	return;
+}
+EXPORT_SYMBOL(vidc_cleanup_addr_table);
+
 u32 vidc_lookup_addr_table(struct video_client_ctx *client_ctx,
 	enum buffer_dir buffer,
 	u32 search_with_user_vaddr,
@@ -459,6 +512,7 @@ u32 vidc_insert_addr_table(struct video_client_ctx *client_ctx,
 	struct msm_mapped_buffer *mapped_buffer = NULL;
 	size_t ion_len;
 	struct ion_handle *buff_ion_handle = NULL;
+	unsigned long ionflag;
 
 	if (!client_ctx || !length)
 		return false;
@@ -505,13 +559,20 @@ u32 vidc_insert_addr_table(struct video_client_ctx *client_ctx,
 			if (IS_ERR_OR_NULL(buff_ion_handle)) {
 				ERR("%s(): get_ION_handle failed\n",
 				 __func__);
+				goto bail_out_add;
+			}
+			if (ion_handle_get_flags(client_ctx->user_ion_client,
+						buff_ion_handle,
+						&ionflag)) {
+				ERR("%s():ION flags fail\n",
+				 __func__);
 				goto ion_error;
 			}
 			*kernel_vaddr = (unsigned long)
 				ion_map_kernel(
 				client_ctx->user_ion_client,
 				buff_ion_handle,
-				0);
+				ionflag);
 			if (!(*kernel_vaddr)) {
 				ERR("%s():ION virtual addr fail\n",
 				 __func__);

@@ -49,7 +49,7 @@
 #include "timer.h"
 #include "board-msm7x27a-regulator.h"
 #include "devices-msm7x2xa.h"
-#include <mach/pm.h>
+#include "pm.h"
 #include <mach/rpc_server_handset.h>
 #include <mach/socinfo.h>
 #include "pm-boot.h"
@@ -1270,9 +1270,6 @@ static int mipi_dsi_panel_power(int on)
 		}
 	} else {
 		gpio_set_value_cansleep(GPIO_LCDC_BRDG_PD, 1);
-
-		if (pmapp_disp_backlight_set_brightness(0))
-			pr_err("backlight set brightness failed\n");
 	}
 
 	rc = on ? regulator_bulk_enable(ARRAY_SIZE(regs_dsi), regs_dsi) :

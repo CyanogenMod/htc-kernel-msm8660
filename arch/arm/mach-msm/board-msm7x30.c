@@ -78,7 +78,7 @@
 #include <linux/usb/android.h>
 #include <mach/usbdiag.h>
 #endif
-#include <mach/pm.h>
+#include "pm.h"
 #include "pm-boot.h"
 #include "spm.h"
 #include "acpuclock.h"
@@ -797,6 +797,7 @@ static struct pm8058_platform_data pm8058_7x30_data = {
 
 #ifdef CONFIG_MSM_SSBI
 static struct msm_ssbi_platform_data msm7x30_ssbi_pm8058_pdata = {
+	.rsl_id = "D:PMIC_SSBI",
 	.controller_type = MSM_SBI_CTRL_SSBI2,
 	.slave	= {
 		.name			= "pm8058-core",
@@ -2143,10 +2144,10 @@ static int marimba_tsadc_exit(void)
 
 
 static struct msm_ts_platform_data msm_ts_data = {
-	.min_x          = 0,
-	.max_x          = 4096,
-	.min_y          = 0,
-	.max_y          = 4096,
+	.min_x          = 284,
+	.max_x          = 3801,
+	.min_y          = 155,
+	.max_y          = 3929,
 	.min_press      = 0,
 	.max_press      = 255,
 	.inv_x          = 4096,
@@ -6348,6 +6349,10 @@ static int tsc2007_power_shutdown(bool enable)
 static struct tsc2007_platform_data tsc2007_ts_data = {
 	.model = 2007,
 	.x_plate_ohms = 300,
+	.min_x		= 210,
+	.max_x		= 3832,
+	.min_y		= 150,
+	.max_y		= 3936,
 	.irq_flags    = IRQF_TRIGGER_LOW,
 	.init_platform_hw = tsc2007_init,
 	.exit_platform_hw = tsc2007_exit,

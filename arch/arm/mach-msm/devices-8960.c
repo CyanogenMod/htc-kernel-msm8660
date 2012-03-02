@@ -1392,6 +1392,11 @@ struct platform_device msm_pcm = {
 	.id	= -1,
 };
 
+struct platform_device msm_multi_ch_pcm = {
+	.name	= "msm-multi-ch-pcm-dsp",
+	.id	= -1,
+};
+
 struct platform_device msm_pcm_routing = {
 	.name	= "msm-pcm-routing",
 	.id	= -1,
@@ -1408,7 +1413,7 @@ struct platform_device msm_cpudai1 = {
 };
 
 struct platform_device msm_cpudai_hdmi_rx = {
-	.name	= "msm-dai-q6",
+	.name	= "msm-dai-q6-hdmi",
 	.id	= 8,
 };
 
@@ -2597,7 +2602,7 @@ struct platform_device msm_dsps_device = {
 #define MSM_ETB_PHYS_BASE		(MSM_QDSS_PHYS_BASE + 0x1000)
 #define MSM_TPIU_PHYS_BASE		(MSM_QDSS_PHYS_BASE + 0x3000)
 #define MSM_FUNNEL_PHYS_BASE		(MSM_QDSS_PHYS_BASE + 0x4000)
-#define MSM_PTM_PHYS_BASE		(MSM_QDSS_PHYS_BASE + 0x1C000)
+#define MSM_ETM_PHYS_BASE		(MSM_QDSS_PHYS_BASE + 0x1C000)
 
 static struct resource msm_etb_resources[] = {
 	{
@@ -2609,7 +2614,7 @@ static struct resource msm_etb_resources[] = {
 
 struct platform_device msm_etb_device = {
 	.name          = "msm_etb",
-	.id            = 0,
+	.id            = -1,
 	.num_resources = ARRAY_SIZE(msm_etb_resources),
 	.resource      = msm_etb_resources,
 };
@@ -2624,7 +2629,7 @@ static struct resource msm_tpiu_resources[] = {
 
 struct platform_device msm_tpiu_device = {
 	.name          = "msm_tpiu",
-	.id            = 0,
+	.id            = -1,
 	.num_resources = ARRAY_SIZE(msm_tpiu_resources),
 	.resource      = msm_tpiu_resources,
 };
@@ -2639,24 +2644,24 @@ static struct resource msm_funnel_resources[] = {
 
 struct platform_device msm_funnel_device = {
 	.name          = "msm_funnel",
-	.id            = 0,
+	.id            = -1,
 	.num_resources = ARRAY_SIZE(msm_funnel_resources),
 	.resource      = msm_funnel_resources,
 };
 
-static struct resource msm_ptm_resources[] = {
+static struct resource msm_etm_resources[] = {
 	{
-		.start = MSM_PTM_PHYS_BASE,
-		.end   = MSM_PTM_PHYS_BASE + (SZ_4K * 2) - 1,
+		.start = MSM_ETM_PHYS_BASE,
+		.end   = MSM_ETM_PHYS_BASE + (SZ_4K * 2) - 1,
 		.flags = IORESOURCE_MEM,
 	},
 };
 
-struct platform_device msm_ptm_device = {
-	.name          = "msm_ptm",
-	.id            = 0,
-	.num_resources = ARRAY_SIZE(msm_ptm_resources),
-	.resource      = msm_ptm_resources,
+struct platform_device msm_etm_device = {
+	.name          = "msm_etm",
+	.id            = -1,
+	.num_resources = ARRAY_SIZE(msm_etm_resources),
+	.resource      = msm_etm_resources,
 };
 
 #endif

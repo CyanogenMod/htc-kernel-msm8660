@@ -147,7 +147,6 @@ static void venc_cb(u32 event, u32 status, void *info, u32 size, void *handle,
 	struct vb2_buffer *vbuf;
 	struct mem_region *mregion;
 	struct vcd_frame_data *frame_data = (struct vcd_frame_data *)info;
-	struct timespec ts;
 
 	if (!client_ctx) {
 		WFD_MSG_ERR("Client context is NULL\n");
@@ -190,9 +189,8 @@ static void venc_cb(u32 event, u32 status, void *info, u32 size, void *handle,
 			break;
 		}
 
-		ktime_get_ts(&ts);
-		vbuf->v4l2_buf.timestamp.tv_sec = ts.tv_sec;
-		vbuf->v4l2_buf.timestamp.tv_usec = ts.tv_nsec/1000;
+		vbuf->v4l2_buf.timestamp =
+			ns_to_timeval(frame_data->time_stamp);
 
 		WFD_MSG_DBG("bytes used %d, ts: %d.%d, frame type is %d\n",
 				frame_data->data_len,
@@ -403,11 +401,12 @@ static long venc_set_codec(struct video_client_ctx *client_ctx, __s32 codec)
 	vcd_property_hdr.prop_id = VCD_I_CODEC;
 	vcd_property_hdr.sz = sizeof(struct vcd_property_codec);
 	vcd_property_codec.codec = VCD_CODEC_H264;
+
 	switch (codec) {
-	case V4L2_MPEG_VIDEO_ENCODING_MPEG_4_AVC:
+	case V4L2_PIX_FMT_H264:
 		vcd_property_codec.codec = VCD_CODEC_H264;
 		break;
-	case V4L2_MPEG_VIDEO_ENCODING_MPEG_1:
+	case V4L2_PIX_FMT_MPEG4:
 		vcd_property_codec.codec = VCD_CODEC_MPEG4;
 		break;
 	default:
@@ -416,39 +415,6 @@ static long venc_set_codec(struct video_client_ctx *client_ctx, __s32 codec)
 	}
 	return vcd_set_property(client_ctx->vcd_handle,
 				&vcd_property_hdr, &vcd_property_codec);
-}
-
-static long venc_get_codec(struct video_client_ctx *client_ctx, __s32 *codec)
-{
-	struct vcd_property_codec vcd_property_codec;
-	struct vcd_property_hdr vcd_property_hdr;
-	int rc = 0;
-
-	vcd_property_hdr.prop_id = VCD_I_CODEC;
-	vcd_property_hdr.sz = sizeof(struct vcd_property_codec);
-
-	rc = vcd_get_property(client_ctx->vcd_handle,
-				&vcd_property_hdr, &vcd_property_codec);
-
-	if (rc < 0) {
-		WFD_MSG_ERR("Failed to get codec property");
-		return rc;
-	}
-
-	switch (vcd_property_codec.codec) {
-	case VCD_CODEC_H264:
-		*codec = V4L2_MPEG_VIDEO_ENCODING_MPEG_4_AVC;
-		break;
-	case VCD_CODEC_MPEG4:
-		*codec = V4L2_MPEG_VIDEO_ENCODING_MPEG_1;
-		break;
-	default:
-		WFD_MSG_ERR("Unrecognized codec");
-		return -EINVAL;
-		break;
-	}
-
-	return rc;
 }
 
 static long venc_set_codec_level(struct video_client_ctx *client_ctx,
@@ -939,6 +905,12 @@ static long venc_set_format(struct v4l2_subdev *sd, void *arg)
 		WFD_MSG_ERR("Invalid parameters\n");
 		return -EINVAL;
 	}
+	rc = venc_set_codec(client_ctx, fmt->fmt.pix.pixelformat);
+	if (rc) {
+		WFD_MSG_ERR("Failed to set codec, rc = %d\n", rc);
+		goto err;
+	}
+
 	rc = venc_set_frame_size(client_ctx, fmt->fmt.pix.height,
 				fmt->fmt.pix.width);
 	if (rc) {
@@ -968,8 +940,9 @@ static long venc_set_framerate(struct v4l2_subdev *sd,
 	vcd_property_hdr.prop_id = VCD_I_FRAME_RATE;
 	vcd_property_hdr.sz =
 				sizeof(struct vcd_property_frame_rate);
-	vcd_frame_rate.fps_denominator = frate->denominator;
-	vcd_frame_rate.fps_numerator = frate->numerator;
+	/* v4l2 passes in "fps" as "spf", so take reciprocal*/
+	vcd_frame_rate.fps_denominator = frate->numerator;
+	vcd_frame_rate.fps_numerator = frate->denominator;
 	rc = vcd_set_property(client_ctx->vcd_handle,
 					&vcd_property_hdr, &vcd_frame_rate);
 	if (rc)
@@ -1014,8 +987,9 @@ static long venc_set_output_buffer(struct v4l2_subdev *sd, void *arg)
 					mregion->offset,
 					32,
 					mregion->size);
-	if (!rc) {
+	if (rc == (u32)false) {
 		WFD_MSG_ERR("Failed to insert outbuf in table\n");
+		rc = -EINVAL;
 		goto err;
 	}
 	WFD_MSG_DBG("size = %u, %p\n", mregion->size, mregion->kvaddr);
@@ -1066,14 +1040,15 @@ static long venc_encode_frame(struct v4l2_subdev *sd, void *arg)
 	int rc = 0;
 	struct venc_inst *inst = sd->dev_priv;
 	struct video_client_ctx *client_ctx = &inst->venc_client;
-	struct mem_region *mregion = arg;
+	struct venc_buf_info *venc_buf = arg;
+	struct mem_region *mregion = venc_buf->mregion;
 	struct vcd_frame_data vcd_input_buffer = {0};
 
 	vcd_input_buffer.virtual = mregion->kvaddr;
 	vcd_input_buffer.frm_clnt_data = (u32)mregion;
 	vcd_input_buffer.ip_frm_tag = (u32)mregion;
 	vcd_input_buffer.data_len = mregion->size;
-	vcd_input_buffer.time_stamp = 0; /*TODO: Need to fix this*/
+	vcd_input_buffer.time_stamp = venc_buf->timestamp;
 	vcd_input_buffer.offset = 0;
 
 	rc = vcd_encode_frame(client_ctx->vcd_handle,
@@ -1233,9 +1208,6 @@ static long venc_set_property(struct v4l2_subdev *sd, void *arg)
 	case V4L2_CID_MPEG_VIDEO_BITRATE_MODE:
 		rc = venc_set_bitrate_mode(client_ctx, ctrl->value);
 		break;
-	case V4L2_CID_MPEG_VIDEO_ENCODING:
-		rc = venc_set_codec(client_ctx, ctrl->value);
-		break;
 	case V4L2_CID_MPEG_VIDEO_H264_I_PERIOD:
 		rc = venc_set_h264_intra_period(client_ctx, ctrl->value);
 		break;
@@ -1269,9 +1241,6 @@ static long venc_get_property(struct v4l2_subdev *sd, void *arg)
 		break;
 	case V4L2_CID_MPEG_VIDEO_BITRATE_MODE:
 		rc = venc_get_bitrate_mode(client_ctx, &ctrl->value);
-		break;
-	case V4L2_CID_MPEG_VIDEO_ENCODING:
-		rc = venc_get_codec(client_ctx, &ctrl->value);
 		break;
 	case V4L2_CID_MPEG_VIDEO_H264_LEVEL:
 		rc = venc_get_codec_level(client_ctx, ctrl->id, &ctrl->value);

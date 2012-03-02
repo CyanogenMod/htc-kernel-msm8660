@@ -8,6 +8,7 @@ config ARCH_MSM7X01A
 	select MSM_VIC
 	select CPU_V6
 	select MSM_REMOTE_SPINLOCK_SWP
+	select MSM_PM if PM
 
 config ARCH_MSM7X25
 	bool "MSM7x25"
@@ -16,6 +17,7 @@ config ARCH_MSM7X25
 	select CPU_V6
 	select MSM_REMOTE_SPINLOCK_SWP
 	select MULTI_IRQ_HANDLER
+	select MSM_PM if PM
 
 config ARCH_MSM7X27
 	bool "MSM7x27"
@@ -32,6 +34,7 @@ config ARCH_MSM7X27
 	select MSM_PROC_COMM_REGULATOR
 	select CLEANCACHE
 	select QCACHE
+	select MSM_PM2 if PM
 
 config ARCH_MSM7X30
 	bool "MSM7x30"
@@ -55,6 +58,7 @@ config ARCH_MSM7X30
 	select REGULATOR
 	select MSM_PROC_COMM_REGULATOR
 	select MULTI_IRQ_HANDLER
+	select MSM_PM2 if PM
 
 config ARCH_QSD8X50
 	bool "QSD8X50"
@@ -66,6 +70,7 @@ config ARCH_QSD8X50
 	select EMULATE_DOMAIN_MANAGER_V7
 	select MSM_GPIOMUX
 	select MSM_DALRPC
+	select MSM_PM2 if PM
 
 config ARCH_MSM8X60
 	bool "MSM8X60"
@@ -121,6 +126,8 @@ config ARCH_MSM8X60
 	select MSM_SPM_V1
 	select MSM_SCM if SMP
 	select MULTI_IRQ_HANDLER
+	select MSM_MULTIMEDIA_USE_ION
+	select MSM_PM8X60 if PM
 
 config ARCH_MSM8960
 	bool "MSM8960"
@@ -159,6 +166,7 @@ config ARCH_MSM8960
 	select QCACHE
 	select MSM_MULTIMEDIA_USE_ION
 	select MULTI_IRQ_HANDLER
+	select MSM_PM8X60 if PM
 
 config ARCH_MSM8930
 	bool "MSM8930"
@@ -194,6 +202,7 @@ config ARCH_MSM8930
 	select FIX_MOVABLE_ZONE
 	select MSM_ULTRASOUND
 	select MULTI_IRQ_HANDLER
+	select MSM_PM8X60 if PM
 
 config ARCH_APQ8064
 	bool "APQ8064"
@@ -209,6 +218,7 @@ config ARCH_APQ8064
 	select MSM_QDSP6_APR
 	select MSM_AUDIO_QDSP6 if SND_SOC
 	select MULTI_IRQ_HANDLER
+	select MSM_PM8X60 if PM
 
 config ARCH_MSMCOPPER
 	bool "MSM Copper"
@@ -219,6 +229,7 @@ config ARCH_MSMCOPPER
 	select MSM_SCM if SMP
 	select MSM_GPIOMUX
 	select MULTI_IRQ_HANDLER
+	select MSM_MULTIMEDIA_USE_ION
 
 config ARCH_FSM9XXX
 	bool "FSM9XXX"
@@ -243,6 +254,7 @@ config ARCH_MSM9615
 	select REGULATOR
 	select MSM_RPM_REGULATOR
 	select MULTI_IRQ_HANDLER
+	select MSM_PM8X60 if PM
 
 endmenu
 
@@ -731,7 +743,7 @@ config PHYS_OFFSET
 config KERNEL_PMEM_EBI_REGION
 	bool "Enable in-kernel PMEM region for EBI"
 	default y if ARCH_MSM8X60
-	depends on ANDROID_PMEM && (ARCH_MSM8X60 || ARCH_MSM8960)
+	depends on ANDROID_PMEM && (ARCH_MSM8X60 || ARCH_MSM8960 || ARCH_MSMCOPPER)
 	help
 	   Enable the in-kernel PMEM allocator to use EBI memory.
 
@@ -1817,6 +1829,22 @@ config MSM_SECURE_IO
 config MSM_NATIVE_RESTART
 	bool
 
+config MSM_PM
+	depends on PM
+	bool
+
+config MSM_PM2
+	depends on PM
+	bool
+
+config MSM_PM8X60
+	depends on PM
+	bool
+
+config MSM_NOPM
+	default y if !PM
+	bool
+
 config MSM_BUS_SCALING
 	bool "Bus scaling driver"
 	default n
@@ -1873,6 +1901,9 @@ config MSM_SLEEP_STATS
 	bool "Enable exporting of MSM sleep stats to userspace"
 	depends on CPU_IDLE
 	default n
+
+config MSM_SLEEP_STATS_DEVICE
+	bool "Enable exporting of MSM sleep device stats to userspace"
 
 config MSM_STANDALONE_POWER_COLLAPSE
        bool "Enable standalone power collapse"
@@ -1990,5 +2021,22 @@ config MSM_MULTIMEDIA_USE_ION
 	  Enable support for multimedia drivers using Ion for buffer management
 	  instead of pmem. Selecting this may also involve userspace
 	  dependencies as well.
+
+config MSM_RTB
+	bool "Register tracing"
+	help
+	  Add support for logging different events to a small uncached
+	  region. This is designed to aid in debugging reset cases where the
+	  caches may not be flushed before the target resets.
+
+config MSM_RTB_SEPARATE_CPUS
+	bool "Separate entries for each cpu"
+	depends on MSM_RTB
+	help
+	  Under some circumstances, it may be beneficial to give dedicated space
+	  for each cpu to log accesses. Selecting this option will log each cpu
+	  separately. This will guarantee that the last acesses for each cpu
+	  will be logged but there will be fewer entries per cpu
+
 
 endif

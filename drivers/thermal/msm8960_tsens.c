@@ -121,11 +121,11 @@ struct tsens_tm_device_sensor {
 	int				offset;
 	int				calib_data;
 	int				calib_data_backup;
+	int				slope_mul_tsens_factor;
 };
 
 struct tsens_tm_device {
 	bool				prev_reading_avail;
-	int				slope_mul_tsens_factor;
 	int				tsens_factor;
 	uint32_t			tsens_num_sensor;
 	enum platform_type		hw_type;
@@ -137,26 +137,28 @@ struct tsens_tm_device *tmdev;
 /* Temperature on y axis and ADC-code on x-axis */
 static int tsens_tz_code_to_degC(int adc_code, int sensor_num)
 {
-	int degC, degcbeforefactor;
-	degcbeforefactor = adc_code * tmdev->slope_mul_tsens_factor
-				+ tmdev->sensor[sensor_num].offset;
+	int degcbeforefactor, degc;
+	degcbeforefactor = (adc_code *
+			tmdev->sensor[sensor_num].slope_mul_tsens_factor
+			+ tmdev->sensor[sensor_num].offset);
+
 	if (degcbeforefactor == 0)
-		degC = degcbeforefactor;
+		degc = degcbeforefactor;
 	else if (degcbeforefactor > 0)
-		degC = (degcbeforefactor + tmdev->tsens_factor/2)
-						/ tmdev->tsens_factor;
-	else  /* rounding for negative degrees */
-		degC = (degcbeforefactor - tmdev->tsens_factor/2)
-						/ tmdev->tsens_factor;
-	return degC;
+		degc = (degcbeforefactor + tmdev->tsens_factor/2)
+				/ tmdev->tsens_factor;
+	else
+		degc = (degcbeforefactor - tmdev->tsens_factor/2)
+				/ tmdev->tsens_factor;
+	return degc;
 }
 
 static int tsens_tz_degC_to_code(int degC, int sensor_num)
 {
 	int code = (degC * tmdev->tsens_factor -
-			tmdev->sensor[sensor_num].offset
-			+ tmdev->slope_mul_tsens_factor/2)
-			/ tmdev->slope_mul_tsens_factor;
+		tmdev->sensor[sensor_num].offset
+		+ tmdev->sensor[sensor_num].slope_mul_tsens_factor/2)
+		/ tmdev->sensor[sensor_num].slope_mul_tsens_factor;
 
 	if (code > TSENS_THRESHOLD_MAX_CODE)
 		code = TSENS_THRESHOLD_MAX_CODE;
@@ -165,28 +167,45 @@ static int tsens_tz_degC_to_code(int degC, int sensor_num)
 	return code;
 }
 
-static int tsens_tz_get_temp(struct thermal_zone_device *thermal,
-			     unsigned long *temp)
+static void tsens8960_get_temp(int sensor_num, unsigned long *temp)
 {
-	struct tsens_tm_device_sensor *tm_sensor = thermal->devdata;
 	unsigned int code;
 
-	if (!tm_sensor || tm_sensor->mode != THERMAL_DEVICE_ENABLED || !temp)
-		return -EINVAL;
-
 	if (!tmdev->prev_reading_avail) {
-		while (!(readl_relaxed(TSENS_INT_STATUS_ADDR) &
-						TSENS_TRDY_MASK))
+		while (!(readl_relaxed(TSENS_INT_STATUS_ADDR)
+					& TSENS_TRDY_MASK))
 			usleep_range(TSENS_TRDY_RDY_MIN_TIME,
 				TSENS_TRDY_RDY_MAX_TIME);
 		tmdev->prev_reading_avail = true;
 	}
 	code = readl_relaxed(TSENS_S0_STATUS_ADDR +
-			(tm_sensor->sensor_num << TSENS_STATUS_ADDR_OFFSET));
-	*temp = tsens_tz_code_to_degC(code, tm_sensor->sensor_num);
+			(sensor_num << TSENS_STATUS_ADDR_OFFSET));
+	*temp = tsens_tz_code_to_degC(code, sensor_num);
+}
+
+static int tsens_tz_get_temp(struct thermal_zone_device *thermal,
+			     unsigned long *temp)
+{
+	struct tsens_tm_device_sensor *tm_sensor = thermal->devdata;
+
+	if (!tm_sensor || tm_sensor->mode != THERMAL_DEVICE_ENABLED || !temp)
+		return -EINVAL;
+
+	tsens8960_get_temp(tm_sensor->sensor_num, temp);
 
 	return 0;
 }
+
+int tsens_get_temp(struct tsens_device *device, unsigned long *temp)
+{
+	if (!tmdev)
+		return -ENODEV;
+
+	tsens8960_get_temp(device->sensor_num, temp);
+
+	return 0;
+}
+EXPORT_SYMBOL(tsens_get_temp);
 
 static int tsens_tz_get_mode(struct thermal_zone_device *thermal,
 			      enum thermal_device_mode *mode)
@@ -577,6 +596,19 @@ static irqreturn_t tsens_isr(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static void tsens8960_sensor_mode_init(void)
+{
+	unsigned int reg_cntl = 0;
+
+	reg_cntl = readl_relaxed(TSENS_CNTL_ADDR);
+	if (tmdev->hw_type == MSM_8960 || tmdev->hw_type == MSM_9615) {
+		writel_relaxed(reg_cntl &
+				~((((1 << tmdev->tsens_num_sensor) - 1) >> 1)
+				<< (TSENS_SENSOR0_SHIFT + 1)), TSENS_CNTL_ADDR);
+		tmdev->sensor[TSENS_MAIN_SENSOR].mode = THERMAL_DEVICE_ENABLED;
+	}
+}
+
 static void tsens_disable_mode(void)
 {
 	unsigned int reg_cntl = 0;
@@ -665,7 +697,8 @@ static int tsens_calib_sensors8660(void)
 	}
 
 	tmdev->sensor[TSENS_MAIN_SENSOR].offset = tmdev->tsens_factor *
-		TSENS_CAL_DEGC - tmdev->slope_mul_tsens_factor *
+		TSENS_CAL_DEGC -
+		tmdev->sensor[TSENS_MAIN_SENSOR].slope_mul_tsens_factor *
 		tmdev->sensor[TSENS_MAIN_SENSOR].calib_data;
 	tmdev->prev_reading_avail = false;
 	INIT_WORK(&tmdev->sensor[TSENS_MAIN_SENSOR].work,
@@ -698,12 +731,13 @@ static int tsens_calib_sensors8960(void)
 				tmdev->sensor[i].calib_data_backup;
 
 		if (!tmdev->sensor[i].calib_data) {
-			pr_err("%s: No temperature sensor:%d data for"
+			WARN(1, "%s: No temperature sensor:%d data for"
 			" calibration in QFPROM!\n", __func__, i);
 			return -ENODEV;
 		}
 		tmdev->sensor[i].offset = tmdev->tsens_factor *
-			TSENS_CAL_DEGC - tmdev->slope_mul_tsens_factor *
+			TSENS_CAL_DEGC -
+			tmdev->sensor[i].slope_mul_tsens_factor *
 			tmdev->sensor[i].calib_data;
 		tmdev->prev_reading_avail = false;
 		INIT_WORK(&tmdev->sensor[i].work, notify_uspace_tsens_fn);
@@ -735,12 +769,10 @@ static int tsens_calib_sensors(void)
 	return rc;
 }
 
-static int __devinit tsens_tm_probe(struct platform_device *pdev)
+int msm_tsens_early_init(struct tsens_platform_data *pdata)
 {
-	int rc, i;
-	struct tsens_platform_data *pdata;
+	int rc = 0, i;
 
-	pdata = pdev->dev.platform_data;
 	if (!pdata) {
 		pr_err("No TSENS Platform data\n");
 		return -EINVAL;
@@ -749,13 +781,14 @@ static int __devinit tsens_tm_probe(struct platform_device *pdev)
 	tmdev = kzalloc(sizeof(struct tsens_tm_device) +
 			pdata->tsens_num_sensor *
 			sizeof(struct tsens_tm_device_sensor),
-			GFP_KERNEL);
+			GFP_ATOMIC);
 	if (tmdev == NULL) {
 		pr_err("%s: kzalloc() failed.\n", __func__);
 		return -ENOMEM;
 	}
 
-	tmdev->slope_mul_tsens_factor = pdata->slope;
+	for (i = 0; i < pdata->tsens_num_sensor; i++)
+		tmdev->sensor[i].slope_mul_tsens_factor = pdata->slope[i];
 	tmdev->tsens_factor = pdata->tsens_factor;
 	tmdev->tsens_num_sensor = pdata->tsens_num_sensor;
 	tmdev->hw_type = pdata->hw_type;
@@ -763,20 +796,34 @@ static int __devinit tsens_tm_probe(struct platform_device *pdev)
 	rc = tsens_check_version_support();
 	if (rc < 0) {
 		kfree(tmdev);
+		tmdev = NULL;
 		return rc;
 	}
 
 	rc = tsens_calib_sensors();
 	if (rc < 0) {
 		kfree(tmdev);
+		tmdev = NULL;
 		return rc;
 	}
 
-	platform_set_drvdata(pdev, tmdev);
-
 	tsens_hw_init();
 
-	for (i = 0; i < pdata->tsens_num_sensor; i++) {
+	pr_info("msm_tsens_early_init: done\n");
+
+	return rc;
+}
+
+static int __init tsens_tm_init(void)
+{
+	int rc, i;
+
+	if (!tmdev) {
+		pr_info("%s : TSENS early init not done.\n", __func__);
+		return -EFAULT;
+	}
+
+	for (i = 0; i < tmdev->tsens_num_sensor; i++) {
 		char name[17];
 		snprintf(name, sizeof(name), "tsens_tz_sensor%d", i);
 		tmdev->sensor[i].mode = THERMAL_DEVICE_ENABLED;
@@ -793,6 +840,8 @@ static int __devinit tsens_tm_probe(struct platform_device *pdev)
 		tmdev->sensor[i].mode = THERMAL_DEVICE_DISABLED;
 	}
 
+	tsens8960_sensor_mode_init();
+
 	rc = request_irq(TSENS_UPPER_LOWER_INT, tsens_isr,
 		IRQF_TRIGGER_RISING, "tsens_interrupt", tmdev);
 	if (rc < 0) {
@@ -802,22 +851,19 @@ static int __devinit tsens_tm_probe(struct platform_device *pdev)
 		goto fail;
 	}
 
-	tsens_disable_mode();
-
-	pr_notice("%s: OK\n", __func__);
+	pr_debug("%s: OK\n", __func__);
 	mb();
 	return 0;
 fail:
 	tsens_disable_mode();
-	platform_set_drvdata(pdev, NULL);
 	kfree(tmdev);
+	tmdev = NULL;
 	mb();
 	return rc;
 }
 
-static int __devexit tsens_tm_remove(struct platform_device *pdev)
+static void __exit tsens_tm_remove(void)
 {
-	struct tsens_tm_device *tmdev = platform_get_drvdata(pdev);
 	int i;
 
 	tsens_disable_mode();
@@ -825,32 +871,12 @@ static int __devexit tsens_tm_remove(struct platform_device *pdev)
 	free_irq(TSENS_UPPER_LOWER_INT, tmdev);
 	for (i = 0; i < tmdev->tsens_num_sensor; i++)
 		thermal_zone_device_unregister(tmdev->sensor[i].tz_dev);
-	platform_set_drvdata(pdev, NULL);
 	kfree(tmdev);
-	return 0;
+	tmdev = NULL;
 }
 
-static struct platform_driver tsens_tm_driver = {
-	.probe	= tsens_tm_probe,
-	.remove	= __devexit_p(tsens_tm_remove),
-	.driver	= {
-		.name = "tsens8960-tm",
-		.owner = THIS_MODULE,
-	},
-};
-
-static int __init tsens_init(void)
-{
-	return platform_driver_register(&tsens_tm_driver);
-}
-
-static void __exit tsens_exit(void)
-{
-	platform_driver_unregister(&tsens_tm_driver);
-}
-
-module_init(tsens_init);
-module_exit(tsens_exit);
+module_init(tsens_tm_init);
+module_exit(tsens_tm_remove);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("MSM8960 Temperature Sensor driver");

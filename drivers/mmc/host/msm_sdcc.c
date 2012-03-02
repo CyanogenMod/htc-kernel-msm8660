@@ -43,6 +43,7 @@
 #include <linux/gpio.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
+#include <linux/pm_qos_params.h>
 
 #include <asm/cacheflush.h>
 #include <asm/div64.h>
@@ -146,6 +147,24 @@ static inline unsigned short msmsdcc_get_nr_sg(struct msmsdcc_host *host)
 	}
 
 	return ret;
+}
+
+/* Prevent idle power collapse(pc) while operating in peripheral mode */
+static void msmsdcc_pm_qos_update_latency(struct msmsdcc_host *host, int vote)
+{
+	u32 swfi_latency = 0;
+
+	if (!host->plat->swfi_latency)
+		return;
+
+	swfi_latency = host->plat->swfi_latency + 1;
+
+	if (vote)
+		pm_qos_update_request(&host->pm_qos_req_dma,
+					swfi_latency);
+	else
+		pm_qos_update_request(&host->pm_qos_req_dma,
+					PM_QOS_DEFAULT_VALUE);
 }
 
 #ifdef CONFIG_MMC_MSM_SPS_SUPPORT
@@ -982,6 +1001,12 @@ msmsdcc_start_command_deferred(struct msmsdcc_host *host,
 			*c |= MCI_CSPM_AUTO_CMD19;
 		}
 	}
+
+	/* Clear CDR_EN bit for write operations */
+	if (host->tuning_needed && cmd->mrq->data &&
+			(cmd->mrq->data->flags & MMC_DATA_WRITE))
+		writel_relaxed((readl_relaxed(host->base + MCI_DLL_CONFIG) &
+				~MCI_CDR_EN), host->base + MCI_DLL_CONFIG);
 
 	if ((cmd->flags & MMC_RSP_R1B) == MMC_RSP_R1B) {
 		*c |= MCI_CPSM_PROGENA;
@@ -2275,6 +2300,10 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	/* Select free running MCLK as input clock of cm_dll_sdc4 */
 	clk |= (2 << 23);
 
+	/* Clear IO_PAD_PWR_SWITCH while powering off the card */
+	if (!ios->vdd)
+		host->io_pad_pwr_switch = 0;
+
 	if (host->io_pad_pwr_switch)
 		clk |= IO_PAD_PWR_SWITCH;
 
@@ -2454,6 +2483,12 @@ static int msmsdcc_enable(struct mmc_host *mmc)
 {
 	int rc;
 	struct device *dev = mmc->parent;
+	struct msmsdcc_host *host = mmc_priv(mmc);
+
+	msmsdcc_pm_qos_update_latency(host, 1);
+
+	if (mmc->card && mmc_card_sdio(mmc->card) && host->is_resumed)
+		return 0;
 
 	if (dev->power.runtime_status == RPM_SUSPENDING) {
 		if (mmc->suspend_task == current) {
@@ -2469,6 +2504,8 @@ static int msmsdcc_enable(struct mmc_host *mmc)
 				__func__, rc);
 		return rc;
 	}
+
+	host->is_resumed = true;
 out:
 	return 0;
 }
@@ -2478,9 +2515,12 @@ static int msmsdcc_disable(struct mmc_host *mmc, int lazy)
 	int rc;
 	struct msmsdcc_host *host = mmc_priv(mmc);
 
+	msmsdcc_pm_qos_update_latency(host, 0);
+
+	if (mmc->card && mmc_card_sdio(mmc->card))
+		return 0;
+
 	if (host->plat->disable_runtime_pm)
-		return -ENOTSUPP;
-	if (mmc->card && mmc->card->type == MMC_TYPE_SDIO)
 		return -ENOTSUPP;
 
 	rc = pm_runtime_put_sync(mmc->parent);
@@ -2488,6 +2528,9 @@ static int msmsdcc_disable(struct mmc_host *mmc, int lazy)
 	if (rc < 0)
 		pr_info("%s: %s: failed with error %d", mmc_hostname(mmc),
 				__func__, rc);
+	else
+		host->is_resumed = false;
+
 	return rc;
 }
 #else
@@ -2495,6 +2538,8 @@ static int msmsdcc_enable(struct mmc_host *mmc)
 {
 	struct msmsdcc_host *host = mmc_priv(mmc);
 	unsigned long flags;
+
+	msmsdcc_pm_qos_update_latency(host, 1);
 
 	spin_lock_irqsave(&host->lock, flags);
 	if (!host->clks_on) {
@@ -2511,8 +2556,10 @@ static int msmsdcc_disable(struct mmc_host *mmc, int lazy)
 	struct msmsdcc_host *host = mmc_priv(mmc);
 	unsigned long flags;
 
+	msmsdcc_pm_qos_update_latency(host, 0);
+
 	if (mmc->card && mmc_card_sdio(mmc->card))
-		return -ENOTSUPP;
+		return 0;
 
 	spin_lock_irqsave(&host->lock, flags);
 	if (host->clks_on) {
@@ -2531,6 +2578,10 @@ static int msmsdcc_start_signal_voltage_switch(struct mmc_host *mmc,
 	struct msmsdcc_host *host = mmc_priv(mmc);
 	unsigned long flags;
 	int rc = 0;
+
+	spin_lock_irqsave(&host->lock, flags);
+	host->io_pad_pwr_switch = 0;
+	spin_unlock_irqrestore(&host->lock, flags);
 
 	if (ios->signal_voltage == MMC_SIGNAL_VOLTAGE_330) {
 		/* Change voltage level of VDDPX to high voltage */
@@ -2839,22 +2890,21 @@ out:
  * Select the 3/4 of the range and configure the DLL with the
  * selected DLL clock output phase.
 */
-
 static u8 find_most_appropriate_phase(struct msmsdcc_host *host,
 				u8 *phase_table, u8 total_phases)
 {
-	u8 ret, temp;
-	u8 ranges[16][16] = { {0}, {0} };
+	u8 ret, ranges[16][16] = { {0}, {0} };
 	u8 phases_per_row[16] = {0};
 	int row_index = 0, col_index = 0, selected_row_index = 0, curr_max = 0;
-	int cnt;
+	int i, cnt, phase_0_raw_index = 0, phase_15_raw_index = 0;
+	bool phase_0_found = false, phase_15_found = false;
 
-	for (cnt = 0; cnt <= total_phases; cnt++) {
+	for (cnt = 0; cnt < total_phases; cnt++) {
 		ranges[row_index][col_index] = phase_table[cnt];
 		phases_per_row[row_index] += 1;
 		col_index++;
 
-		if ((cnt + 1) > total_phases) {
+		if ((cnt + 1) == total_phases) {
 			continue;
 		/* check if next phase in phase_table is consecutive or not */
 		} else if ((phase_table[cnt] + 1) != phase_table[cnt + 1]) {
@@ -2863,15 +2913,50 @@ static u8 find_most_appropriate_phase(struct msmsdcc_host *host,
 		}
 	}
 
-	for (cnt = 0; cnt <= total_phases; cnt++) {
+	/* Check if phase-0 is present in first valid window? */
+	if (!ranges[0][0]) {
+		phase_0_found = true;
+		phase_0_raw_index = 0;
+		/* Check if cycle exist between 2 valid windows */
+		for (cnt = 1; cnt <= row_index; cnt++) {
+			if (phases_per_row[cnt]) {
+				for (i = 0; i <= phases_per_row[cnt]; i++) {
+					if (ranges[cnt][i] == 15) {
+						phase_15_found = true;
+						phase_15_raw_index = cnt;
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	/* If 2 valid windows form cycle then merge them as single window */
+	if (phase_0_found && phase_15_found) {
+		/* number of phases in raw where phase 0 is present */
+		u8 phases_0 = phases_per_row[phase_0_raw_index];
+		/* number of phases in raw where phase 15 is present */
+		u8 phases_15 = phases_per_row[phase_15_raw_index];
+
+		cnt = 0;
+		for (i = phases_15; i < (phases_15 + phases_0); i++) {
+			ranges[phase_15_raw_index][i] =
+				ranges[phase_0_raw_index][cnt];
+			cnt++;
+		}
+		phases_per_row[phase_0_raw_index] = 0;
+		phases_per_row[phase_15_raw_index] = phases_15 + phases_0;
+	}
+
+	for (cnt = 0; cnt <= row_index; cnt++) {
 		if (phases_per_row[cnt] > curr_max) {
 			curr_max = phases_per_row[cnt];
 			selected_row_index = cnt;
 		}
 	}
 
-	temp = ((curr_max * 3) / 4);
-	ret = ranges[selected_row_index][temp];
+	i = ((curr_max * 3) / 4) - 1;
+	ret = ranges[selected_row_index][i];
 
 	return ret;
 }
@@ -2944,11 +3029,12 @@ static int msmsdcc_execute_tuning(struct mmc_host *mmc)
 			!memcmp(data_buf, cmd19_tuning_block, 64)) {
 			/* tuning is successful with this tuning point */
 			tuned_phases[tuned_phase_cnt++] = phase;
+			pr_debug("%s: %s: found good phase = %d\n",
+				mmc_hostname(mmc), __func__, phase);
 		}
 	} while (++phase < 16);
 
 	if (tuned_phase_cnt) {
-		tuned_phase_cnt--;
 		phase = find_most_appropriate_phase(host, tuned_phases,
 							tuned_phase_cnt);
 		/*
@@ -4047,6 +4133,11 @@ msmsdcc_probe(struct platform_device *pdev)
 	/* Apply Hard reset to SDCC to put it in power on default state */
 	msmsdcc_hard_reset(host);
 
+	/* pm qos request to prevent apps idle power collapse */
+	if (host->plat->swfi_latency)
+		pm_qos_add_request(&host->pm_qos_req_dma,
+			PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
+
 	ret = msmsdcc_vreg_init(host, true);
 	if (ret) {
 		pr_err("%s: msmsdcc_vreg_init() failed (%d)\n", __func__, ret);
@@ -4324,6 +4415,8 @@ msmsdcc_probe(struct platform_device *pdev)
 	msmsdcc_vreg_init(host, false);
  clk_disable:
 	clk_disable(host->clk);
+	if (host->plat->swfi_latency)
+		pm_qos_remove_request(&host->pm_qos_req_dma);
  clk_put:
 	clk_put(host->clk);
  pclk_disable:
@@ -4395,6 +4488,9 @@ static int msmsdcc_remove(struct platform_device *pdev)
 		clk_put(host->pclk);
 	if (!IS_ERR_OR_NULL(host->dfab_pclk))
 		clk_put(host->dfab_pclk);
+
+	if (host->plat->swfi_latency)
+		pm_qos_remove_request(&host->pm_qos_req_dma);
 
 	msmsdcc_vreg_init(host, false);
 

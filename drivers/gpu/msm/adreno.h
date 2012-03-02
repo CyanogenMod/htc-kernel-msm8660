@@ -24,6 +24,7 @@
 		KGSL_CONTAINER_OF(device, struct adreno_device, dev)
 
 /* Flags to control command packet settings */
+#define KGSL_CMD_FLAGS_NONE             0x00000000
 #define KGSL_CMD_FLAGS_PMODE		0x00000001
 #define KGSL_CMD_FLAGS_NO_TS_CMP	0x00000002
 #define KGSL_CMD_FLAGS_NOT_KERNEL_CMD	0x00000004
@@ -76,14 +77,12 @@ struct adreno_device {
 };
 
 struct adreno_gpudev {
-	int (*ctxt_gpustate_shadow)(struct adreno_device *,
-		struct adreno_context *);
-	int (*ctxt_gmem_shadow)(struct adreno_device *,
-		struct adreno_context *);
+	int (*ctxt_create)(struct adreno_device *, struct adreno_context *);
 	void (*ctxt_save)(struct adreno_device *, struct adreno_context *);
 	void (*ctxt_restore)(struct adreno_device *, struct adreno_context *);
 	irqreturn_t (*irq_handler)(struct adreno_device *);
 	void (*irq_control)(struct adreno_device *, int);
+	void * (*snapshot)(struct adreno_device *, void *, int *, int);
 };
 
 extern struct adreno_gpudev adreno_a2xx_gpudev;
@@ -107,6 +106,9 @@ const struct kgsl_memdesc *adreno_find_region(struct kgsl_device *device,
 
 uint8_t *adreno_convertaddr(struct kgsl_device *device,
 	unsigned int pt_base, unsigned int gpuaddr, unsigned int size);
+
+void *adreno_snapshot(struct kgsl_device *device, void *snapshot, int *remain,
+		int hang);
 
 static inline int adreno_is_a200(struct adreno_device *adreno_dev)
 {

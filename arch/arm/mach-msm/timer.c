@@ -215,13 +215,13 @@ static uint32_t msm_read_timer_count(struct msm_clock *clock, int global)
 		return __raw_readl(addr);
 
 	t1 = __raw_readl(addr);
-	t2 = __raw_readl(addr);
+	t2 = __raw_readl_no_log(addr);
 	if ((t2-t1) <= 1)
 		return t2;
 	while (1) {
-		t1 = __raw_readl(addr);
-		t2 = __raw_readl(addr);
-		t3 = __raw_readl(addr);
+		t1 = __raw_readl_no_log(addr);
+		t2 = __raw_readl_no_log(addr);
+		t3 = __raw_readl_no_log(addr);
 		cpu_relax();
 		if ((t3-t2) <= 1)
 			return t3;
@@ -304,7 +304,7 @@ static int msm_timer_set_next_event(unsigned long cycles,
 		/* read the counter four extra times to make sure write posts
 		   before reading the time */
 		for (i = 0; i < 4; i++)
-			__raw_readl(clock->regbase + TIMER_COUNT_VAL);
+			__raw_readl_no_log(clock->regbase + TIMER_COUNT_VAL);
 	}
 	now = msm_read_timer_count(clock, LOCAL_TIMER);
 	clock_state->last_set = now;
@@ -405,11 +405,7 @@ void __iomem *msm_timer_get_timer0_base(void)
  */
 static void (*msm_timer_sync_timeout)(void);
 #if defined(CONFIG_MSM_DIRECT_SCLK_ACCESS)
-static uint32_t msm_timer_do_sync_to_sclk(
-	void (*time_start)(struct msm_timer_sync_data_t *data),
-	bool (*time_expired)(struct msm_timer_sync_data_t *data),
-	void (*update)(struct msm_timer_sync_data_t *, uint32_t, uint32_t),
-	struct msm_timer_sync_data_t *data)
+uint32_t msm_timer_get_sclk_ticks(void)
 {
 	uint32_t t1, t2;
 	int loop_count = 10;
@@ -419,11 +415,12 @@ static uint32_t msm_timer_do_sync_to_sclk(
 	tmp /= (loop_zero_count-1);
 
 	while (loop_zero_count--) {
-		t1 = __raw_readl(MSM_RPM_MPM_BASE + MPM_SCLK_COUNT_VAL);
+		t1 = __raw_readl_no_log(MSM_RPM_MPM_BASE + MPM_SCLK_COUNT_VAL);
 		do {
 			udelay(1);
 			t2 = t1;
-			t1 = __raw_readl(MSM_RPM_MPM_BASE + MPM_SCLK_COUNT_VAL);
+			t1 = __raw_readl_no_log(
+				MSM_RPM_MPM_BASE + MPM_SCLK_COUNT_VAL);
 		} while ((t2 != t1) && --loop_count);
 
 		if (!loop_count) {
@@ -442,7 +439,18 @@ static uint32_t msm_timer_do_sync_to_sclk(
 		return 0;
 	}
 
-	if (update != NULL)
+	return t1;
+}
+
+static uint32_t msm_timer_do_sync_to_sclk(
+	void (*time_start)(struct msm_timer_sync_data_t *data),
+	bool (*time_expired)(struct msm_timer_sync_data_t *data),
+	void (*update)(struct msm_timer_sync_data_t *, uint32_t, uint32_t),
+	struct msm_timer_sync_data_t *data)
+{
+	unsigned t1 = msm_timer_get_sclk_ticks();
+
+	if (t1 && update != NULL)
 		update(data, t1, sclk_hz);
 	return t1;
 }

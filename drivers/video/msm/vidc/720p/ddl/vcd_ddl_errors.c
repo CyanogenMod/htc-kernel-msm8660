@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,7 +11,7 @@
  *
  */
 
-#include "vidc_type.h"
+#include <media/msm/vidc_type.h>
 #include "vcd_ddl_utils.h"
 #include "vcd_ddl.h"
 
@@ -353,6 +353,10 @@ static u32 ddl_handle_core_recoverable_errors(struct ddl_context \
 	case INVALID_MMCO:
 	case INVALID_PIC_REORDERING:
 	case INVALID_POC_TYPE:
+		{
+			vcd_status = VCD_ERR_BITSTREAM_ERR;
+			break;
+		}
 	case ACTIVE_SPS_NOT_PRESENT:
 	case ACTIVE_PPS_NOT_PRESENT:
 		{

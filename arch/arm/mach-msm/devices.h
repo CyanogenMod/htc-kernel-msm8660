@@ -158,6 +158,7 @@ extern struct platform_device msm_gsbi1_qup_spi_device;
 extern struct platform_device msm_device_vidc_720p;
 
 extern struct platform_device msm_pcm;
+extern struct platform_device msm_multi_ch_pcm;
 extern struct platform_device msm_pcm_routing;
 extern struct platform_device msm_cpudai0;
 extern struct platform_device msm_cpudai1;
@@ -264,7 +265,7 @@ extern struct platform_device msm9615_device_watchdog;
 extern struct platform_device msm_etb_device;
 extern struct platform_device msm_tpiu_device;
 extern struct platform_device msm_funnel_device;
-extern struct platform_device msm_ptm_device;
+extern struct platform_device msm_etm_device;
 #endif
 
 extern struct platform_device msm_bus_8064_apps_fabric;

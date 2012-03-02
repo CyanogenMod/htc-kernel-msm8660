@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -186,14 +186,20 @@ static struct v4l2_subdev_ops imx074_act_subdev_ops = {
 };
 
 static int32_t imx074_act_create_subdevice(
-	void *board_info,
+	void *act_info,
 	void *sdev)
 {
+	struct msm_actuator_info *info = (struct msm_actuator_info *)act_info;
 	LINFO("%s called\n", __func__);
 
 	return (int) msm_actuator_create_subdevice(&imx074_act_t,
-		(struct i2c_board_info const *)board_info,
+		(struct i2c_board_info const *)info->board_info,
 		(struct v4l2_subdev *)sdev);
+}
+
+static int imx074_act_power_down(void *act_info)
+{
+	return (int) msm_actuator_af_power_down(&imx074_act_t);
 }
 
 static struct msm_actuator_ctrl_t imx074_act_t = {
@@ -204,6 +210,7 @@ static struct msm_actuator_ctrl_t imx074_act_t = {
 		.a_init_table = imx074_i2c_add_driver_table,
 		.a_create_subdevice = imx074_act_create_subdevice,
 		.a_config = imx074_act_config,
+		.a_power_down = imx074_act_power_down,
 	},
 
 	.i2c_client = {

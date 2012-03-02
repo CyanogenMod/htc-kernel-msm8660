@@ -22,14 +22,19 @@
 #include "qdss.h"
 #include "cp14.h"
 
+ /* no of dbg regs + 1 (for storing the reg count) */
 #define MAX_DBG_REGS		(90)
 #define MAX_DBG_STATE_SIZE	(MAX_DBG_REGS * num_possible_cpus())
+ /* no of etm regs + 1 (for storing the reg count) */
 #define MAX_ETM_REGS		(78)
 #define MAX_ETM_STATE_SIZE	(MAX_ETM_REGS * num_possible_cpus())
 
 #define DBGDSCR_MASK		(0x6C30FC3C)
 #define CPMR_ETMCLKEN		(0x8)
 
+
+uint32_t msm_jtag_save_cntr[NR_CPUS];
+uint32_t msm_jtag_restore_cntr[NR_CPUS];
 
 struct dbg_ctx {
 	uint8_t		arch;
@@ -70,7 +75,7 @@ static int dbg_read_bxr(uint32_t *state, int i, int j)
 		break;
 	case 3:
 		state[i++] = dbg_read(DBGBVR3);
-		state[i++] = dbg_read(DBGBVR3);
+		state[i++] = dbg_read(DBGBCR3);
 		break;
 	case 4:
 		state[i++] = dbg_read(DBGBVR4);
@@ -78,7 +83,7 @@ static int dbg_read_bxr(uint32_t *state, int i, int j)
 		break;
 	case 5:
 		state[i++] = dbg_read(DBGBVR5);
-		state[i++] = dbg_read(DBGBVR5);
+		state[i++] = dbg_read(DBGBCR5);
 		break;
 	case 6:
 		state[i++] = dbg_read(DBGBVR6);
@@ -143,7 +148,7 @@ static int dbg_write_bxr(uint32_t *state, int i, int j)
 		break;
 	case 3:
 		dbg_write(state[i++], DBGBVR3);
-		dbg_write(state[i++], DBGBVR3);
+		dbg_write(state[i++], DBGBCR3);
 		break;
 	case 4:
 		dbg_write(state[i++], DBGBVR4);
@@ -151,7 +156,7 @@ static int dbg_write_bxr(uint32_t *state, int i, int j)
 		break;
 	case 5:
 		dbg_write(state[i++], DBGBVR5);
-		dbg_write(state[i++], DBGBVR5);
+		dbg_write(state[i++], DBGBCR5);
 		break;
 	case 6:
 		dbg_write(state[i++], DBGBVR6);
@@ -937,9 +942,9 @@ static inline void etm_restore_state(int cpu)
 		etm_write(etm.state[i++], ETMSQ12EVR);
 		etm_write(etm.state[i++], ETMSQ21EVR);
 		etm_write(etm.state[i++], ETMSQ23EVR);
+		etm_write(etm.state[i++], ETMSQ31EVR);
 		etm_write(etm.state[i++], ETMSQ32EVR);
 		etm_write(etm.state[i++], ETMSQ13EVR);
-		etm_write(etm.state[i++], ETMSQ31EVR);
 		etm_write(etm.state[i++], ETMSQR);
 		for (j = 0; j < etm.nr_ext_out; j++)
 			i = etm_write_extoutevr(etm.state, i, j);
@@ -1013,6 +1018,10 @@ void msm_jtag_save_state(void)
 
 	cpu = raw_smp_processor_id();
 
+	msm_jtag_save_cntr[cpu]++;
+	/* ensure counter is updated before moving forward */
+	mb();
+
 	if (dbg.arch_supported)
 		dbg_save_state(cpu);
 	if (etm.arch_supported)
@@ -1024,6 +1033,10 @@ void msm_jtag_restore_state(void)
 	int cpu;
 
 	cpu = raw_smp_processor_id();
+
+	msm_jtag_restore_cntr[cpu]++;
+	/* ensure counter is updated before moving forward */
+	mb();
 
 	if (dbg.arch_supported)
 		dbg_restore_state(cpu);
@@ -1046,9 +1059,9 @@ static int __init msm_jtag_dbg_init(void)
 		pr_info("dbg arch %u not supported\n", dbg.arch);
 		goto dbg_out;
 	}
-	dbg.nr_ctx_cmp = BMVAL(dbgdidr, 20, 23);
-	dbg.nr_bp = BMVAL(dbgdidr, 24, 27);
-	dbg.nr_wp = BMVAL(dbgdidr, 28, 31);
+	dbg.nr_ctx_cmp = BMVAL(dbgdidr, 20, 23) + 1;
+	dbg.nr_bp = BMVAL(dbgdidr, 24, 27) + 1;
+	dbg.nr_wp = BMVAL(dbgdidr, 28, 31) + 1;
 
 	/* Allocate dbg state save space */
 	dbg.state = kzalloc(MAX_DBG_STATE_SIZE * sizeof(uint32_t), GFP_KERNEL);

@@ -149,7 +149,8 @@ enum usb_bam_pipe_dir {
  *              for msm_otg driver.
  * @phy_init_seq: PHY configuration sequence. val, reg pairs
  *              terminated by -1.
- * @vbus_power: VBUS power on/off routine.
+ * @vbus_power: VBUS power on/off routine.It should return result
+ *		as success(zero value) or failure(non-zero value).
  * @power_budget: VBUS power budget in mA (0 will be treated as 500mA).
  * @mode: Supported mode (OTG/peripheral/host).
  * @otg_control: OTG switch controlled by user/Id pin
@@ -160,10 +161,14 @@ enum usb_bam_pipe_dir {
  * @disable_reset_on_disconnect: perform USB PHY and LINK reset
  *              on USB cable disconnection.
  * @swfi_latency: miminum latency to allow swfi.
+ * @enable_dcd: Enable Data Contact Detection circuit. if not set
+ *              wait for 600msec before proceeding to primary
+ *              detection.
+ * @bus_scale_table: parameters for bus bandwidth requirements
  */
 struct msm_otg_platform_data {
 	int *phy_init_seq;
-	void (*vbus_power)(bool on);
+	int (*vbus_power)(bool on);
 	unsigned power_budget;
 	enum usb_mode_type mode;
 	enum otg_control_type otg_control;
@@ -174,6 +179,8 @@ struct msm_otg_platform_data {
 	bool mhl_enable;
 	bool disable_reset_on_disconnect;
 	u32 swfi_latency;
+	bool enable_dcd;
+	struct msm_bus_scale_pdata *bus_scale_table;
 };
 
 /**
@@ -206,6 +213,7 @@ struct msm_otg_platform_data {
 	collapse when cable is connected.
  * @id_timer: The timer used for polling ID line to detect ACA states.
  * @xo_handle: TCXO buffer handle
+ * @bus_perf_client: Bus performance client handle to request BUS bandwidth
  */
 struct msm_otg {
 	struct otg_transceiver otg;
@@ -236,6 +244,7 @@ struct msm_otg {
 	struct timer_list id_timer;
 	unsigned long caps;
 	struct msm_xo_voter *xo_handle;
+	uint32_t bus_perf_client;
 	/*
 	 * Allowing PHY power collpase turns off the HSUSB 3.3v and 1.8v
 	 * analog regulators while going to low power mode.
