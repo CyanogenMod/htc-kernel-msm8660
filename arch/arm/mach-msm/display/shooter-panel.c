@@ -31,7 +31,6 @@
 #include <mach/panel_id.h>
 #include <mach/msm_bus_board.h>
 #include <linux/mfd/pmic8058.h>
-//#include <linux/leds-pm8058.h>
 #include <mach/msm_memtypes.h>
 #include <linux/pwm.h>
 #include <linux/pmic8058-pwm.h>
@@ -42,6 +41,8 @@
 #include "../board-shooter.h"
 #include "../devices-msm8x60.h"
 #include "../../../../drivers/video/msm/mdp_hw.h"
+
+#include <linux/ion.h>
 
 //TODO START
 //     had linker issues when including the header below.
