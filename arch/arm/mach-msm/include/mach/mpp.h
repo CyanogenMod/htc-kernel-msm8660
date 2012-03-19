@@ -234,7 +234,14 @@ static inline int pm8901_mpp_config_digital_in(unsigned mpp, unsigned level,
 static inline int pm8901_mpp_config_digital_out(unsigned mpp, unsigned level,
 						unsigned control)
 {
-	return pm8901_mpp_config(mpp, PM_MPP_TYPE_D_OUTPUT, level, control);
+        struct pm8xxx_mpp_config_data config = {
+                .type    = PM_MPP_TYPE_D_OUTPUT,
+                .level   = level,
+                .control = control,
+        };
+
+	return pm8xxx_mpp_config(mpp, &config);
+	//return pm8xxx_mpp_config(PM8901_MPP_PM_TO_SYS(mpp), &config);
 }
 
 static inline int pm8901_mpp_config_bi_dir(unsigned mpp, unsigned level,

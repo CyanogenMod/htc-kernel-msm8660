@@ -65,6 +65,10 @@ struct adie_codec_action_unit {
 struct adie_codec_hwsetting_entry{
 	struct adie_codec_action_unit *actions;
 	u32 action_sz;
+	struct adie_codec_action_unit *midi_action;
+	u32 midi_action_sz;
+	struct adie_codec_action_unit *voc_action;
+	u32 voc_action_sz;
 	u32 freq_plan;
 	u32 osr;
 	/* u32  VolMask;

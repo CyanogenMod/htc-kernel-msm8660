@@ -656,6 +656,12 @@ config TPS65200
 	  Charging current 100mA~500mA or 500mA~1000mA
 	  by GPIO or Register
 
+config AMP_TPA2051D3
+	tristate "TI TPA2051D3 Speaker AMP Driver"
+	depends on I2C=y
+	help
+	  TI TPA2051D3 Speaker AMP Driver implemented by HTC.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

@@ -63,6 +63,8 @@
 					unsigned short)
 #define AUDIO_GET_BITSTREAM_ERROR_INFO _IOR(AUDIO_IOCTL_MAGIC, 42, \
 			       struct msm_audio_bitstream_error_info)
+#define AUDIO_SET_Q6_EFFECT  _IOW(AUDIO_IOCTL_MAGIC, 43, unsigned)
+
 /* Qualcomm extensions */
 #define AUDIO_SET_STREAM_CONFIG   _IOW(AUDIO_IOCTL_MAGIC, 80, \
 				struct msm_audio_stream_config)
@@ -134,6 +136,7 @@
 #define NS_ENABLE		0x0002
 #define TX_IIR_ENABLE		0x0004
 #define FLUENCE_ENABLE		0x0008
+#define STEREO_RECORD_ENABLE	0x0016
 
 #define VOC_REC_UPLINK		0x00
 #define VOC_REC_DOWNLINK	0x01

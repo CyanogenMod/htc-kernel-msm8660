@@ -19,6 +19,7 @@
 #include <linux/msm-charger.h>
 #include <linux/m_adcproc.h>
 #include <linux/proc_fs.h>
+#include <linux/spi/spi.h>
 
 #ifdef CONFIG_USB_G_ANDROID
 #include <linux/usb/android.h>
@@ -50,6 +51,7 @@
 #include <mach/rpm.h>
 #include <mach/rpm-regulator.h>
 #include <mach/socinfo.h>
+#include <mach/tpa2051d3.h>
 
 #include "acpuclock.h"
 #include "devices.h"
@@ -2349,6 +2351,66 @@ static struct i2c_board_info i2c_isl29029_devices[] = {
 	},
 };
 
+#ifdef CONFIG_MSM8X60_AUDIO
+static uint32_t msm_spi_gpio[] = {
+	GPIO_CFG(SHOOTER_SPI_DO,  0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(SHOOTER_SPI_DI,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	GPIO_CFG(SHOOTER_SPI_CS,  0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(SHOOTER_SPI_CLK, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+};
+
+static uint32_t auxpcm_gpio_table[] = {
+	GPIO_CFG(111, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(112, 0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	GPIO_CFG(113, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(114, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+};
+
+static void msm_auxpcm_init(void)
+{
+	gpio_tlmm_config(auxpcm_gpio_table[0], GPIO_CFG_DISABLE);
+	gpio_tlmm_config(auxpcm_gpio_table[1], GPIO_CFG_DISABLE);
+	gpio_tlmm_config(auxpcm_gpio_table[2], GPIO_CFG_DISABLE);
+	gpio_tlmm_config(auxpcm_gpio_table[3], GPIO_CFG_DISABLE);
+}
+
+static struct tpa2051d3_platform_data tpa2051d3_pdata = {
+	.gpio_tpa2051_spk_en = SHOOTER_AUD_SPK_ENO,
+	.spkr_cmd = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+	.hsed_cmd = {0x00, 0x0C, 0x25, 0x57, 0x6D, 0x4D, 0x0D},
+	.rece_cmd = {0x00, 0x02, 0x25, 0x57, 0x0D, 0x4D, 0x0D},
+};
+
+#define TPA2051D3_I2C_SLAVE_ADDR	(0xE0 >> 1)
+
+static struct i2c_board_info msm_i2c_gsbi7_tpa2051d3_info[] = {
+	{
+                I2C_BOARD_INFO(TPA2051D3_I2C_NAME, TPA2051D3_I2C_SLAVE_ADDR),
+                .platform_data = &tpa2051d3_pdata,
+	},
+};
+
+void msm_snddev_voltage_on(void)
+{
+}
+
+void __init shooter_audio_init(void);
+
+void msm_snddev_voltage_off(void)
+{
+}
+
+static struct spi_board_info msm_spi_board_info[] __initdata = {
+	{
+		.modalias	= "spi_aic3254",
+		.mode		= SPI_MODE_1,
+		.bus_num	= 0,
+		.chip_select	= 0,
+		.max_speed_hz	= 10800000,
+	}
+};
+#endif /* CONFIG_MSM8X60_AUDIO */
+
 #ifdef CONFIG_I2C
 struct i2c_registry {
 	int                    bus;
@@ -2362,6 +2424,13 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		msm_i2c_gsbi5_info,
 		ARRAY_SIZE(msm_i2c_gsbi5_info),
 	},
+#ifdef CONFIG_MSM8X60_AUDIO
+	{
+		MSM_GSBI7_QUP_I2C_BUS_ID,
+		msm_i2c_gsbi7_tpa2051d3_info,
+		ARRAY_SIZE(msm_i2c_gsbi7_tpa2051d3_info),
+	},
+#endif
 };
 #endif /* CONFIG_I2C */
 
@@ -2392,6 +2461,12 @@ static void register_i2c_devices(void)
 		printk(KERN_DEBUG "No Intersil chips\n");
 #endif
 }
+
+static struct platform_device *asoc_devices[] __initdata = {
+	&asoc_msm_pcm,
+	&asoc_msm_dai0,
+	&asoc_msm_dai1,
+};
 
 static struct platform_device *devices[] __initdata = {
 	&ram_console_device,
@@ -3767,7 +3842,6 @@ static void __init msm8x60_init(void)
 	msm8x60_init_gpiomux(msm8x60_htc_gpiomux_cfgs);
 	msm8x60_init_mmc();
 
-
 #ifdef CONFIG_MSM_DSPS
 	msm8x60_init_dsps();
 #endif
@@ -3783,6 +3857,9 @@ static void __init msm8x60_init(void)
 #ifdef CONFIG_USB_EHCI_MSM_72K
 	msm_add_host(0, &msm_usb_host_pdata);
 #endif
+
+	platform_add_devices(asoc_devices, ARRAY_SIZE(asoc_devices));
+
 	register_i2c_devices();
 	shooter_init_panel();
 	msm_pm_set_platform_data(msm_pm_data, ARRAY_SIZE(msm_pm_data));
@@ -3801,6 +3878,17 @@ static void __init msm8x60_init(void)
                                 &shooter_properties_attr_group);
 	if (!properties_kobj || rc)
 		pr_err("failed to create board_properties\n");
+
+#ifdef CONFIG_MSM8X60_AUDIO
+        spi_register_board_info(msm_spi_board_info, ARRAY_SIZE(msm_spi_board_info));
+        gpio_tlmm_config(msm_spi_gpio[0], GPIO_CFG_DISABLE);
+        gpio_tlmm_config(msm_spi_gpio[1], GPIO_CFG_DISABLE);
+        gpio_tlmm_config(msm_spi_gpio[2], GPIO_CFG_DISABLE);
+        gpio_tlmm_config(msm_spi_gpio[3], GPIO_CFG_DISABLE);
+        msm_auxpcm_init();
+        msm_snddev_init();
+        shooter_audio_init();
+#endif
 }
 
 static void __init msm8x60_init_early(void)

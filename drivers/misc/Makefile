@@ -70,3 +70,4 @@ obj-y				+= mpu3050/
 obj-$(CONFIG_INPUT_ISL29028)	+= isl29028.o
 obj-$(CONFIG_INPUT_ISL29029)	+= isl29029.o
 obj-$(CONFIG_TPS65200)          += tps65200.o
+obj-$(CONFIG_AMP_TPA2051D3)     += tpa2051d3.o

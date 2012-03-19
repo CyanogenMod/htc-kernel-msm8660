@@ -20,4 +20,8 @@ obj-$(CONFIG_SND_SOC)	+= s6000/
 obj-$(CONFIG_SND_SOC)	+= sh/
 obj-$(CONFIG_SND_SOC)	+= tegra/
 obj-$(CONFIG_SND_SOC)	+= txx9/
+ifdef CONFIG_HTC_DEVICE
+obj-$(CONFIG_SND_SOC)   += msm_1x/
+else
 obj-$(CONFIG_SND_SOC)   += msm/
+endif
