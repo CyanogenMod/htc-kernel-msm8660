@@ -2653,6 +2653,14 @@ static struct ion_platform_data ion_pdata = {
 			.extra_data = (void *) &cp_wb_ion_pdata,
 		},
 		{
+			.id	= ION_QSECOM_HEAP_ID,
+			.type	= ION_HEAP_TYPE_CARVEOUT,
+			.name	= ION_QSECOM_HEAP_NAME,
+			.size	= MSM_ION_QSECOM_SIZE,
+			.memory_type = ION_EBI_TYPE,
+			.extra_data = (void *) &co_ion_pdata,
+		},
+		{
 			.id	= ION_AUDIO_HEAP_ID,
 			.id	= ION_AUDIO_HEAP_ID,
 			.type	= ION_HEAP_TYPE_CARVEOUT,
