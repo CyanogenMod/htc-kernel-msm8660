@@ -692,10 +692,10 @@ void __init msm8x60_allocate_fb_region(void)
 }
 
 int mdp_core_clk_rate_table[] = {
-       85330000,
-       85330000,
-       160000000,
-       200000000,
+	85330000,
+	128000000,
+	160000000,
+	200000000,
 };
 
 struct mdp_reg shooter_color_v11[] = {
