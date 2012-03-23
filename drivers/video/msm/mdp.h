@@ -42,6 +42,7 @@ extern uint32 mdp_hw_revision;
 extern ulong mdp4_display_intf;
 extern spinlock_t mdp_spin_lock;
 extern int mdp_rev;
+extern struct mdp_csc_cfg mdp_csc_convert[4];
 
 extern struct workqueue_struct *mdp_hist_wq;
 extern struct work_struct mdp_histogram_worker;
@@ -225,9 +226,23 @@ struct mdp_dma_data {
 };
 
 struct mdp_reg {
-    uint32_t reg;
-    uint32_t val;
-    uint32_t mask;
+	uint32_t reg;
+	uint32_t val;
+	uint32_t mask;
+};
+
+extern struct list_head mdp_hist_lut_list;
+extern struct mutex mdp_hist_lut_list_mutex;
+struct mdp_hist_lut_mgmt {
+	uint32_t block;
+	struct mutex lock;
+	struct list_head list;
+};
+
+struct mdp_hist_lut_info {
+	uint32_t block;
+	boolean is_enabled, has_sel_update;
+	int bank_sel;
 };
 
 #define MDP_CMD_DEBUG_ACCESS_BASE   (MDP_BASE+0x10000)
@@ -729,6 +744,11 @@ unsigned long mdp_perf_level2clk_rate(uint32 perf_level);
 
 #ifdef CONFIG_MSM_BUS_SCALING
 int mdp_bus_scale_update_request(uint32_t index);
+#else
+static inline int mdp_bus_scale_update_request(uint32_t index)
+{
+	return 0;
+}
 #endif
 
 #ifdef MDP_HW_VSYNC

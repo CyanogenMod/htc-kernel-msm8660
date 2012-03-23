@@ -26,11 +26,19 @@
 enum vsg_flags {
 	VSG_NEVER_RELEASE = 1<<0,
 	VSG_NEVER_SET_LAST_BUFFER = 1<<1,
+	VSG_BUF_BEING_ENCODED = 1<<2,
 };
 
 enum vsg_modes {
 	VSG_MODE_CFR,
 	VSG_MODE_VFR,
+};
+
+enum vsg_states {
+	VSG_STATE_NONE,
+	VSG_STATE_STARTED,
+	VSG_STATE_STOPPED,
+	VSG_STATE_ERROR
 };
 
 struct vsg_buf_info {
@@ -58,10 +66,16 @@ struct vsg_context {
 	struct vsg_buf_info *last_buffer, *regen_buffer;
 	bool send_regen_buffer;
 	int mode;
-	bool stopped;
+	int state;
 };
 
 struct vsg_work {
+	struct vsg_context *context;
+	struct work_struct work;
+};
+
+struct vsg_encode_work {
+	struct vsg_buf_info *buf;
 	struct vsg_context *context;
 	struct work_struct work;
 };
