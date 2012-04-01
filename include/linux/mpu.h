@@ -317,6 +317,7 @@ struct mpu3050_platform_data {
 	struct ext_slave_platform_data accel;
 	struct ext_slave_platform_data compass;
 	struct ext_slave_platform_data pressure;
+	int (*g_sensors_reset)(void);
 };
 
 

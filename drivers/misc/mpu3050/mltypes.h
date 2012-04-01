@@ -220,9 +220,9 @@ typedef int_fast8_t bool;
 #define ML_ERROR_ACCEL_DATA_ERROR       (82)
 
 /* For Linux coding compliance */
-#ifndef __KERNEL__
+/*#ifndef __KERNEL__
 #define EXPORT_SYMBOL(x)
-#endif
+#endif*/
 
 /*---------------------------
     p-Types

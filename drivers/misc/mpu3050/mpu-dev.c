@@ -76,6 +76,7 @@ static int pid;
 static struct i2c_client *this_client;
 
 int mpu_debug_flag;
+int mpu_sensors_reset;
 
 static int mpu_open(struct inode *inode, struct file *file)
 {
@@ -1024,10 +1025,6 @@ static const struct file_operations mpu_fops = {
 
 static unsigned short normal_i2c[] = { I2C_CLIENT_END };
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 32)
-I2C_CLIENT_INSMOD;
-#endif
-
 static struct miscdevice i2c_mpu_device = {
 	.minor = MISC_DYNAMIC_MINOR,
 	.name = "mpu", /* Same for both 3050 and 6000 */
@@ -1035,6 +1032,7 @@ static struct miscdevice i2c_mpu_device = {
 };
 
 void *g_handler;
+int (*g_sensors_reset)(void);
 
 struct class *mpu3050_class;
 struct device *mpu3050_dev;
@@ -1045,11 +1043,20 @@ static ssize_t pwr_reg_show(struct device *dev,
 	unsigned char b[2] = "";
 	int result;
 
+	unsigned char bma[8] = "";
+
 	result = MLSLSerialRead(g_handler, 0x68,
 				MPUREG_USER_CTRL, 2, b);
 
+	result = MLSLSerialRead(g_handler, 0x18,
+				0x0F, 2, bma);
+
 	result = sprintf(buf, "MPUREG_USER_CTRL = 0x%x, MPUREG_PWR_MGM = "
-			 "0x%x\n", b[0], b[1]);
+			      "0x%x.\n"
+			      "BMA register 0x0F = 0x%x, "
+			      "BMA register 0x10 = 0x%x\n",
+			      b[0], b[1],
+			      bma[0], bma[1]);
 
 	return result;
 }
@@ -1088,6 +1095,39 @@ static ssize_t mpu_debug_flag_store(struct device *dev,
 static DEVICE_ATTR(mpu_debug_flag, 0664, mpu_debug_flag_show, \
 		mpu_debug_flag_store);
 
+static ssize_t mpu_sensors_reset_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	char *s = buf;
+
+	s += sprintf(s, "mpu_sensors_reset = 0x%x\n", mpu_sensors_reset);
+
+	return s - buf;
+}
+
+static ssize_t mpu_sensors_reset_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	int rc = 0;
+
+	mpu_sensors_reset = -1;
+	sscanf(buf, "%d", &mpu_sensors_reset);
+
+	D("%s: mpu_sensors_reset = %d\n", __func__, mpu_sensors_reset);
+
+	if ((mpu_sensors_reset == 1) && g_sensors_reset) {
+		rc = g_sensors_reset();
+		if (rc)
+			E("G-Sensor, Compass, Gyro reset error\n");
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR(mpu_sensors_reset, 0664, mpu_sensors_reset_show, \
+		mpu_sensors_reset_store);
+
 
 int mpu3050_probe(struct i2c_client *client,
 		  const struct i2c_device_id *devid)
@@ -1123,6 +1163,8 @@ int mpu3050_probe(struct i2c_client *client,
 	} else {
 		mldl_cfg->pdata = pdata;
 
+	g_sensors_reset = pdata->g_sensors_reset;
+
 #if defined(CONFIG_MPU_SENSORS_MPU3050_MODULE) || \
     defined(CONFIG_MPU_SENSORS_MPU6000_MODULE)
 		pdata->accel.get_slave_descr = get_accel_slave_descr;
@@ -1148,8 +1190,8 @@ int mpu3050_probe(struct i2c_client *client,
 				if (res)
 					goto out_accelirq_failed;
 			} else {
-				dev_warn(&this_client->adapter->dev,
-					"WARNING: Accel irq not assigned\n");
+				dev_info(&this_client->adapter->dev,
+					"Accel irq not needed\n");
 			}
 		} else {
 			dev_warn(&this_client->adapter->dev,
@@ -1174,8 +1216,8 @@ int mpu3050_probe(struct i2c_client *client,
 				if (res)
 					goto out_compassirq_failed;
 			} else {
-				dev_warn(&this_client->adapter->dev,
-					"WARNING: Compass irq not assigned\n");
+				dev_info(&this_client->adapter->dev,
+					"Compass irq not needed\n");
 			}
 		} else {
 			dev_warn(&this_client->adapter->dev,
@@ -1205,7 +1247,7 @@ int mpu3050_probe(struct i2c_client *client,
 					"WARNING: Pressure irq not assigned\n");
 			}
 		} else {
-			dev_warn(&this_client->adapter->dev,
+			dev_info(&this_client->adapter->dev,
 				 "%s: No Pressure Present\n", MPU_NAME);
 		}
 	}
@@ -1280,10 +1322,20 @@ int mpu3050_probe(struct i2c_client *client,
 		goto err_create_mpu_device_mpu_debug_flag_file;
 	}
 
+	/* register the attributes */
+	res = device_create_file(mpu3050_dev, &dev_attr_mpu_sensors_reset);
+	if (res) {
+		E("%s, create mpu3050_device_create_file fail!\n", __func__);
+		goto err_create_mpu_device_sensors_reset_flag_file;
+	}
+
 	mpu_debug_flag = 0;
+	mpu_sensors_reset = 0;
 
 	return res;
 
+err_create_mpu_device_sensors_reset_flag_file:
+	device_remove_file(mpu3050_dev, &dev_attr_mpu_debug_flag);
 err_create_mpu_device_mpu_debug_flag_file:
 	device_remove_file(mpu3050_dev, &dev_attr_pwr_reg);
 err_create_mpu_device_file:
@@ -1383,12 +1435,7 @@ static struct i2c_driver mpu3050_driver = {
 		   .owner = THIS_MODULE,
 		   .name = MPU_NAME,
 		   },
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 32)
-	.address_data = &addr_data,
-#else
 	.address_list = normal_i2c,
-#endif
-
 	.shutdown = mpu_shutdown,	/* optional */
 	.suspend = mpu_suspend,	/* optional */
 	.resume = mpu_resume,	/* optional */
