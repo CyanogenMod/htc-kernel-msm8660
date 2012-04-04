@@ -1601,7 +1601,12 @@ static struct platform_device rpm_regulator_device = {
 static int configure_uart_gpios(int on)
 {
 	int ret = 0, i;
-	int uart_gpios[] = {53, 54, 55, 56};
+	int uart_gpios[] = {
+		SHOOTER_GPIO_BT_UART1_TX,
+		SHOOTER_GPIO_BT_UART1_RX,
+		SHOOTER_GPIO_BT_UART1_CTS,
+		SHOOTER_GPIO_BT_UART1_RTS,
+	};
 	for (i = 0; i < ARRAY_SIZE(uart_gpios); i++) {
 		if (on) {
 			ret = msm_gpiomux_get(uart_gpios[i]);
@@ -1618,6 +1623,7 @@ static int configure_uart_gpios(int on)
 			msm_gpiomux_put(uart_gpios[i]);
 	return ret;
 }
+
 static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
        .inject_rx_on_wakeup = 1,
        .rx_to_inject = 0xFD,
@@ -2488,6 +2494,9 @@ static struct platform_device *devices[] __initdata = {
 	&msm_gsbi5_qup_i2c_device,
 	&msm_gsbi7_qup_i2c_device,
 	&msm_gsbi10_qup_i2c_device,
+#endif
+#ifdef CONFIG_SERIAL_MSM_HS
+	&msm_device_uart_dm1,
 #endif
 #if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)
 	&msm_gsbi1_qup_spi_device,
@@ -3834,7 +3843,6 @@ static void __init msm8x60_init_buses(void)
 #endif
 #ifdef CONFIG_SERIAL_MSM_HS
 	msm_uart_dm1_pdata.wakeup_irq = gpio_to_irq(SHOOTER_GPIO_BT_HOST_WAKE);
-	msm_device_uart_dm1.name = "msm_serial_hs_brcm"; /* for brcm */
 	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
 #endif
 #ifdef CONFIG_MSM_BUS_SCALING
