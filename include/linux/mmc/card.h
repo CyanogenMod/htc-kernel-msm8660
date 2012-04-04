@@ -169,6 +169,10 @@ struct mmc_card {
 #define MMC_TYPE_SD		1		/* SD card */
 #define MMC_TYPE_SDIO		2		/* SDIO card */
 #define MMC_TYPE_SD_COMBO	3		/* SD combo (IO+mem) card */
+#define MMC_TYPE_SDIO_WIMAX	4		/* SDIO card of WIMAX */
+#define MMC_TYPE_SDIO_SVLTE	5		/* SDIO card of SVLTE*/
+#define MMC_TYPE_SDIO_WIFI	6		/* SDIO card of wifi */
+
 	unsigned int		state;		/* (our) card state */
 #define MMC_STATE_PRESENT	(1<<0)		/* present in sysfs */
 #define MMC_STATE_READONLY	(1<<1)		/* card is read-only */

@@ -289,7 +289,7 @@
 #define SHOOTER_AUD_REMO_EN        PMGPIO(15)
 #define SHOOTER_AUD_REMO_PRES      PMGPIO(37)
 
-int __init shooter_init_mmc(void);
+void __init shooter_init_mmc(void);
 void __init shooter_audio_init(void);
 void __init shooter_init_keypad(void);
 int __init shooter_wifi_init(void);

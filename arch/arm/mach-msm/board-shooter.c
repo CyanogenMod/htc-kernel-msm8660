@@ -38,6 +38,7 @@
 #include <mach/gpiomux.h>
 #include <mach/htc_battery_core.h>
 #include <mach/htc_battery_8x60.h>
+#include <mach/htc_bdaddress.h>
 #include <mach/mpp.h>
 #include <mach/msm_bus_board.h>
 #include <mach/msm_dsps.h>
@@ -160,6 +161,13 @@ static struct platform_device msm_gemini_device = {
 	.name           = "msm_gemini",
 	.resource       = msm_gemini_resources,
 	.num_resources  = ARRAY_SIZE(msm_gemini_resources),
+};
+#endif
+
+#ifdef CONFIG_BT
+static struct platform_device shooter_rfkill = {
+	.name = "shooter_rfkill",
+	.id = -1,
 };
 #endif
 
@@ -2544,6 +2552,9 @@ static struct platform_device *devices[] __initdata = {
 #endif
 	&msm_tsens_device,
 	&msm_rpm_device,
+#ifdef CONFIG_BT
+	&shooter_rfkill,
+#endif
 #ifdef CONFIG_ION_MSM
 	&ion_dev,
 #endif
@@ -2946,7 +2957,7 @@ static void __init msm8x60_init_ebi2(void)
 
 	if (machine_is_msm8x60_surf() || machine_is_msm8x60_ffa() ||
 	    machine_is_msm8x60_fluid() || machine_is_msm8x60_dragon() ||
-	     machine_is_shooter()) {
+	    machine_is_shooter()) {
 		ebi2_cfg_ptr = ioremap_nocache(0x1a110000, SZ_4K);
 		if (ebi2_cfg_ptr != 0) {
 			/* EBI2_XMEM_CFG:PWRSAVE_MODE off */
@@ -3045,7 +3056,7 @@ struct msm_sdcc_pad_drv_cfg {
 
 #ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
 static struct msm_sdcc_pad_drv_cfg sdc3_pad_on_drv_cfg[] = {
-	{TLMM_HDRV_SDC3_CLK, GPIO_CFG_10MA},
+	{TLMM_HDRV_SDC3_CLK, GPIO_CFG_8MA},
 	{TLMM_HDRV_SDC3_CMD, GPIO_CFG_8MA},
 	{TLMM_HDRV_SDC3_DATA, GPIO_CFG_8MA}
 };
@@ -3064,6 +3075,30 @@ static struct msm_sdcc_pad_drv_cfg sdc3_pad_off_drv_cfg[] = {
 static struct msm_sdcc_pad_pull_cfg sdc3_pad_off_pull_cfg[] = {
 	{TLMM_PULL_SDC3_CMD, GPIO_CFG_PULL_DOWN},
 	{TLMM_PULL_SDC3_DATA, GPIO_CFG_PULL_DOWN}
+};
+#endif
+
+#ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
+static struct msm_sdcc_pad_drv_cfg sdc4_pad_on_drv_cfg[] = {
+	{TLMM_HDRV_SDC4_CLK, GPIO_CFG_8MA},
+	{TLMM_HDRV_SDC4_CMD, GPIO_CFG_8MA},
+	{TLMM_HDRV_SDC4_DATA, GPIO_CFG_8MA}
+};
+
+static struct msm_sdcc_pad_pull_cfg sdc4_pad_on_pull_cfg[] = {
+	{TLMM_PULL_SDC4_CMD, GPIO_CFG_PULL_UP},
+	{TLMM_PULL_SDC4_DATA, GPIO_CFG_PULL_UP}
+};
+
+static struct msm_sdcc_pad_drv_cfg sdc4_pad_off_drv_cfg[] = {
+	{TLMM_HDRV_SDC4_CLK, GPIO_CFG_2MA},
+	{TLMM_HDRV_SDC4_CMD, GPIO_CFG_2MA},
+	{TLMM_HDRV_SDC4_DATA, GPIO_CFG_2MA}
+};
+
+static struct msm_sdcc_pad_pull_cfg sdc4_pad_off_pull_cfg[] = {
+	{TLMM_PULL_SDC4_CMD, GPIO_CFG_PULL_DOWN},
+	{TLMM_PULL_SDC4_DATA, GPIO_CFG_PULL_DOWN}
 };
 #endif
 
@@ -3474,6 +3509,7 @@ static int msm_sdcc_setup_vreg(int dev_id, unsigned char enable)
 	if (curr->sts == enable)
 		goto out;
 
+	mdelay(5);
 	if (curr_vdd_reg) {
 		if (enable)
 			rc = msm_sdcc_vreg_enable(curr_vdd_reg);
@@ -3586,6 +3622,7 @@ static unsigned int msm8x60_sdcc_slot_status(struct device *dev)
 #endif
 
 #ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
+static unsigned int shooter_emmcslot_type = MMC_TYPE_MMC;
 static struct mmc_platform_data msm8x60_sdc1_data = {
 	.ocr_mask       = MMC_VDD_27_28 | MMC_VDD_28_29,
 	.translate_vdd  = msm_sdcc_setup_power,
@@ -3600,10 +3637,12 @@ static struct mmc_platform_data msm8x60_sdc1_data = {
 	.nonremovable	= 1,
 	.pclk_src_dfab	= 1,
 	.disable_runtime_pm = 1,
+	.slot_type	= &shooter_emmcslot_type,
 };
 #endif
 
 #ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
+static unsigned int shooter_sdslot_type = MMC_TYPE_SD;
 static struct mmc_platform_data msm8x60_sdc3_data = {
 	.ocr_mask       = MMC_VDD_27_28 | MMC_VDD_28_29,
 	.translate_vdd  = msm_sdcc_setup_power,
@@ -3621,8 +3660,22 @@ static struct mmc_platform_data msm8x60_sdc3_data = {
 	.nonremovable	= 0,
 	.pclk_src_dfab  = 1,
 	.disable_runtime_pm = 1,
+	.slot_type	= &shooter_sdslot_type,
 };
 #endif
+
+static uint32_t msm_rpm_get_swfi_latency(void)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(msm_rpmrs_levels); i++) {
+		if (msm_rpmrs_levels[i].sleep_mode ==
+			MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT)
+			return msm_rpmrs_levels[i].latency_us;
+	}
+
+	return 0;
+}
 
 static void __init msm8x60_init_mmc(void)
 {
@@ -3642,6 +3695,7 @@ static void __init msm8x60_init_mmc(void)
 	sdcc_vreg_data[0].vccq_data->set_voltage_sup = 0;
 	sdcc_vreg_data[0].vccq_data->always_on = 1;
 
+	msm8x60_sdc1_data.swfi_latency = msm_rpm_get_swfi_latency();
 	msm_add_sdcc(1, &msm8x60_sdc1_data);
 #endif
 #ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
@@ -3650,8 +3704,8 @@ static void __init msm8x60_init_mmc(void)
 	sdcc_vreg_data[2].vdd_data->reg_name = "8058_l14";
 	sdcc_vreg_data[2].vdd_data->set_voltage_sup = 1;
 	sdcc_vreg_data[2].vdd_data->level = 2850000;
-	sdcc_vreg_data[2].vdd_data->always_on = 1;
-	sdcc_vreg_data[2].vdd_data->op_pwr_mode_sup = 1;
+	sdcc_vreg_data[2].vdd_data->always_on = 0;
+	sdcc_vreg_data[2].vdd_data->op_pwr_mode_sup = 0;
 	sdcc_vreg_data[2].vdd_data->lpm_uA = 9000;
 	sdcc_vreg_data[2].vdd_data->hpm_uA = 200000;
 
@@ -3667,16 +3721,14 @@ static void __init msm8x60_init_mmc(void)
 	 * vote can be in terms of mA (min. 1 mA).
 	 * So let's vote for 2 mA during sleep.
 	 */
-	sdcc_vreg_data[2].vddp_data->lpm_uA = 2000;
+	sdcc_vreg_data[2].vddp_data->lpm_uA = 10000;
 	/* Max. Active current required is 16 mA */
 	sdcc_vreg_data[2].vddp_data->hpm_uA = 16000;
 
 	msm_add_sdcc(3, &msm8x60_sdc3_data);
 #endif
 #ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
-	ret = shooter_init_mmc();
-	if (ret != 0)
-		pr_crit("%s: Unable to initialize MMC (SDCC4)\n", __func__);
+	shooter_init_mmc();
 #endif
 }
 
@@ -3776,6 +3828,9 @@ static void __init msm8x60_init_buses(void)
 #endif
 #ifdef CONFIG_USB_GADGET_MSM_72K
 	msm_device_gadget_peripheral.dev.platform_data = &msm_gadget_pdata;
+#endif
+#ifdef CONFIG_BT
+	bt_export_bd_address();
 #endif
 #ifdef CONFIG_SERIAL_MSM_HS
 	msm_uart_dm1_pdata.wakeup_irq = gpio_to_irq(SHOOTER_GPIO_BT_HOST_WAKE);
@@ -3879,6 +3934,7 @@ static void __init msm8x60_init(void)
 	pm8058_gpios_init();
 
 	shooter_init_keypad();
+	shooter_wifi_init();
 
 	properties_kobj = kobject_create_and_add("board_properties", NULL);
 	if (properties_kobj)

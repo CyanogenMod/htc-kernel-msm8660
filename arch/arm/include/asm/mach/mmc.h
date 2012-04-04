@@ -153,6 +153,9 @@ struct mmc_platform_data {
 	bool disable_runtime_pm;
 	bool disable_cmd23;
 	u32 swfi_latency;
+
+	// HTC extension
+	unsigned int *slot_type;
 };
 
 #endif
