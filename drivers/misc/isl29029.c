@@ -35,7 +35,7 @@
 #include <linux/wakelock.h>
 #include <linux/rtc.h>
 #include <linux/slab.h>
-#include <mach/board.h>
+#include <mach/board_htc.h>
 
 #define DPS(x...) printk(KERN_DEBUG "[PS][ISL29029] " x)
 #define DLS(x...) printk(KERN_DEBUG "[LS][ISL29029] " x)
@@ -97,6 +97,7 @@ struct isl29029_info {
 	struct wake_lock ps_wake_lock;
 	int psensor_opened;
 	int lightsensor_opened;
+	uint8_t default_config_reg;
 };
 
 static struct isl29029_info *lp_info;
@@ -407,15 +408,15 @@ static void report_lsensor_input_event(struct isl29029_info *lpi)
 		}
 	}
 
-	if (i== 0 && (adc_value >= (*(lpi->cali_table + i))) ) {
+	if (i == 0 && (adc_value >= (*(lpi->cali_table + i)))) {
 		ret = set_lsensor_range((i == 0) ? 0 :
 				*(lpi->cali_table + (i - 1)) + 1,
-				adc_value + 1);
+				raw_adc_value + 1);
 		if (ret < 0)
 			ELS("%s: set_lsensor_range fail\n", __func__);
 
-		ILS("ALS_ADC = 0x%03X, Level = %d, l_thd equal 0, h_thd(adc_value+1) = 0x%x \n",
-			adc_value, level,  adc_value + 1);
+		ILS("ALS_ADC = 0x%03X, Level = %d, l_thd equal 0, h_thd(raw_adc_value+1) = 0x%x \n",
+			adc_value, level,  raw_adc_value + 1);
 	} else if (i < 10) {
 		ret = set_lsensor_range((i == 0) ? 0 :
 				*(lpi->cali_table + (i - 1)) + 1,
@@ -423,12 +424,12 @@ static void report_lsensor_input_event(struct isl29029_info *lpi)
 		if (ret < 0)
 			ELS("%s: set_lsensor_range fail\n", __func__);
 
-		if (i== 0)
+		if (i == 0)
 			ILS("ALS_ADC = 0x%03X, Level = %d, l_thd equal 0, h_thd = 0x%x \n",
 				adc_value, level,  *(lpi->cali_table + i));
 		else
 			ILS("ALS_ADC = 0x%03X, Level = %d, l_thd equal = 0x%x, h_thd = 0x%x \n",
-				adc_value, level, *(lpi->cali_table + (i - 1)) + 1,*(lpi->cali_table + i));
+				adc_value, level, *(lpi->cali_table + (i - 1)) + 1, *(lpi->cali_table + i));
 	} else
 		ILS("%s: i = %d\n", __func__, i);
 
@@ -515,9 +516,9 @@ static void check_and_recover(struct isl29029_info *lpi)
 			EPS("%s : Set LPS INTR fail\n", __func__);
 	}
 
-	if (def_reg_config != CONFIG_DEFAULT) {
+	if (def_reg_config != lpi->default_config_reg) {
 		buffer[0] = ISL29029_CONFIGURE;
-		buffer[1] = (CONFIG_DEFAULT | orig_enabled);
+		buffer[1] = (lpi->default_config_reg | orig_enabled);
 		ret = I2C_TxData(buffer, 2);
 		if (ret < 0)
 			EPS("%s : Set LPS Configuration fail\n",
@@ -707,12 +708,11 @@ static irqreturn_t isl29029_irq_handler(int irq, void *data)
 	value1 = gpio_get_value(lpi->intr_pin);
 	DPS("\n%s: intr_pin = %d, value of intr_pin = %d\n",
 		__func__, lpi->intr_pin, value1);*/
+	if (lpi->ps_enable == 1)
+		IPS("%s\n", __func__);
 
 	disable_irq_nosync(lpi->irq);
-
-	/*DPS("%s\n", __func__);*/
-
-	queue_work(lpi->lp_wq, &sensor_irq_work);
+	queue_work_on(0, lpi->lp_wq, &sensor_irq_work);
 
 	return IRQ_HANDLED;
 }
@@ -935,16 +935,16 @@ static void psensor_set_kvalue(struct isl29029_info *lpi)
 			lpi->ps_lt = thl_value;
 			lpi->ps_ht = thh_value;
 			IPS("%s: PS calibrated  ps_lt = 0x%x"
-						", ps_ht = 0x%x\n",__func__, lpi->ps_lt, lpi->ps_ht);
+						", ps_ht = 0x%x\n", __func__, lpi->ps_lt, lpi->ps_ht);
 		} else{
 			EPS("%s: PS no calibrated,  default ps_lt = 0x%x"
-						", ps_ht = 0x%x\n",__func__, lpi->ps_lt, lpi->ps_ht);
+						", ps_ht = 0x%x\n", __func__, lpi->ps_lt, lpi->ps_ht);
 			if (lpi->calibrate_func != NULL) {
 				if (lpi->ps_B_val != 0 && lpi->ps_C_val != 0) {
 					lpi->calibrate_func(lpi->ps_B_val, lpi->ps_C_val, lpi->ps_A_val,
 					lpi->ps_X_val, &thl_value, &thh_value);
 					IPS("%s: PS recaculate  ps_lt = 0x%x"
-						", ps_ht = 0x%x\n",__func__, thl_value, thh_value);
+						", ps_ht = 0x%x\n", __func__, thl_value, thh_value);
 				}
 			}
 			if ((thl_value != 0) && (thh_value != 0) && (thh_value > thl_value)) {
@@ -1133,10 +1133,19 @@ static ssize_t ps_kadc_show(struct device *dev,
 	int ret = 0;
 	struct isl29029_info *lpi = lp_info;
 
-	ret = sprintf(buf, "(B_value, C_value, A_value, X_value, THL, THH)"
-		" = (0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x)\n",
-		lpi->ps_B_val, lpi->ps_C_val, lpi->ps_A_val, lpi->ps_X_val,
-		lpi->ps_lt, lpi->ps_ht);
+	if ((ps_kparam1 >> 16) == PS_CALIBRATED) {
+		ret = sprintf(buf, "P-sensor calibrated, "
+			"(B_value, C_value, A_value, X_value,"
+			" THL, THH) = (0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x)\n",
+			lpi->ps_B_val, lpi->ps_C_val, lpi->ps_A_val,
+			lpi->ps_X_val, lpi->ps_lt, lpi->ps_ht);
+	} else {
+		ret = sprintf(buf, "P-sensor NOT calibrated, "
+			"(B_value, C_value, A_value, X_value,"
+			" THL, THH) = (0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x)\n",
+			lpi->ps_B_val, lpi->ps_C_val, lpi->ps_A_val,
+			lpi->ps_X_val, lpi->ps_lt, lpi->ps_ht);
+	}
 
 	return ret;
 }
@@ -1579,7 +1588,7 @@ static int isl29029_setup(struct isl29029_info *lpi)
 	}
 
 	buffer[0] = ISL29029_CONFIGURE;
-	buffer[1] = CONFIG_DEFAULT;
+	buffer[1] = lpi->default_config_reg;
 	ret = I2C_TxData(buffer, 2);
 	if (ret < 0) {
 		EPS("%s : failed to set LPS Configuration fail\n",
@@ -1631,6 +1640,7 @@ static int isl29029_suspend(struct i2c_client *client, pm_message_t mesg)
 
 static int isl29029_resume(struct i2c_client *client)
 {
+	struct isl29029_info *lpi = lp_info;
 	char buffer[2];
 	uint8_t reg_config = 0;
 	int ret = 0;
@@ -1651,7 +1661,7 @@ static int isl29029_resume(struct i2c_client *client)
 				__func__);
 
 		buffer[0] = ISL29029_CONFIGURE;
-		buffer[1] = CONFIG_DEFAULT;
+		buffer[1] = lpi->default_config_reg;
 		ret = I2C_TxData(buffer, 2);
 		if (ret < 0)
 			EPS("%s : failed to set "
@@ -1708,7 +1718,14 @@ static int isl29029_probe(struct i2c_client *client,
 	lpi->default_ps_lt = pdata->lt;
 	lpi->default_ps_ht = pdata->ht;
 	lpi->calibrate_func = pdata->calibrate_func;
+	if (pdata->default_config_reg != 0)
+		lpi->default_config_reg = pdata->default_config_reg;
+	else
+		lpi->default_config_reg = CONFIG_DEFAULT;
 	lp_info = lpi;
+
+	/*DLS("Andy: lpi->default_config_reg = 0x%x\n",
+				lpi->default_config_reg);*/
 
 	als_power(1);
 
@@ -1820,7 +1837,7 @@ static int isl29029_probe(struct i2c_client *client,
 	if (ret)
 		goto err_create_ps_device;
 
-	IPS("%s: Probe success!\n", __func__);
+	IPS("%s: Probe success! [CONFIGURE from board]\n", __func__);
 	return ret;
 
 err_create_ps_device:

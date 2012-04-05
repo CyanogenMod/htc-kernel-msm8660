@@ -57,6 +57,7 @@ struct isl29029_platform_data {
 	uint8_t *mapping_table;
 	uint8_t mapping_size;
 	uint8_t enable_polling_ignore;
+	uint8_t default_config_reg;
 };
 
 #endif
