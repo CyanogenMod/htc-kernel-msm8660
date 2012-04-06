@@ -3582,6 +3582,7 @@ setup_vreg:
 }
 
 #ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
+#ifdef CONFIG_MMC_MSM_SDC3_WP_SUPPORT
 static int msm_sdc3_get_wpswitch(struct device *dev)
 {
 	struct platform_device *pdev;
@@ -3603,6 +3604,7 @@ static int msm_sdc3_get_wpswitch(struct device *dev)
 	}
 	return status;
 }
+#endif
 #endif
 
 #ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
@@ -3656,7 +3658,9 @@ static struct mmc_platform_data msm8x60_sdc3_data = {
 	.ocr_mask       = MMC_VDD_27_28 | MMC_VDD_28_29,
 	.translate_vdd  = msm_sdcc_setup_power,
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+#ifdef CONFIG_MMC_MSM_SDC3_WP_SUPPORT
 	.wpswitch  	= msm_sdc3_get_wpswitch,
+#endif
 #ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
 	.status      = msm8x60_sdcc_slot_status,
 	.status_irq  = PM8058_GPIO_IRQ(PM8058_IRQ_BASE,
