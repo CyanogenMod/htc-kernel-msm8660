@@ -2086,7 +2086,7 @@ static int pm8058_gpios_init(void)
 }
 
 static struct pm8xxx_vibrator_platform_data pm8058_vib_pdata = {
-	.initial_vibrate_ms = 500,
+	.initial_vibrate_ms = 0,
 	.level_mV = 3000,
 	.max_timeout_ms = 15000,
 };
