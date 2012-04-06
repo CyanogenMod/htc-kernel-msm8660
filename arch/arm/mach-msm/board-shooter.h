@@ -263,7 +263,7 @@
 #define PMGPIO(x) (x-1)
 #define SHOOTER_VOL_UP             (104)
 #define SHOOTER_VOL_DN             (103)
-#define SHOOTER_AUD_HANDSET_ENO    PMGPIO(18)
+#define SHOOTER_AUD_HP_EN          PMGPIO(18)
 #define SHOOTER_AUD_SPK_ENO        PMGPIO(19)
 #define SHOOTER_3DLCM_PD           PMGPIO(20)
 #define SHOOTER_PS_VOUT            PMGPIO(22)

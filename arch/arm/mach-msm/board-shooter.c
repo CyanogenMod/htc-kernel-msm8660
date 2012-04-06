@@ -1908,7 +1908,7 @@ static int pm8058_gpios_init(void)
 			}
 		},
 		{ /* Audio Receiver Amplifier */
-			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_HANDSET_ENO),	/* 17 */
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_HP_EN),	/* 17 */
 			{
 				.direction	= PM_GPIO_DIR_OUT,
 				.output_value	= 0,
@@ -2086,10 +2086,158 @@ static int pm8058_gpios_init(void)
 }
 
 static struct pm8xxx_vibrator_platform_data pm8058_vib_pdata = {
-	.initial_vibrate_ms  = 500,
+	.initial_vibrate_ms = 500,
 	.level_mV = 3000,
 	.max_timeout_ms = 15000,
 };
+
+#if defined(CONFIG_PMIC8058_OTHC) || defined(CONFIG_PMIC8058_OTHC_MODULE)
+#define PM8058_LINE_IN_DET_GPIO PM8058_GPIO_PM_TO_SYS(18)
+static struct othc_accessory_info othc_accessories[]  = {
+	{
+		.accessory = OTHC_SVIDEO_OUT,
+		.detect_flags = OTHC_MICBIAS_DETECT | OTHC_SWITCH_DETECT |
+							OTHC_ADC_DETECT,
+		.key_code = SW_VIDEOOUT_INSERT,
+		.enabled = false,
+		.adc_thres = {
+				.min_threshold = 20,
+				.max_threshold = 40,
+		},
+	},
+	{
+		.accessory = OTHC_ANC_HEADPHONE,
+		.detect_flags = OTHC_MICBIAS_DETECT | OTHC_GPIO_DETECT |
+							OTHC_SWITCH_DETECT,
+		.gpio = PM8058_LINE_IN_DET_GPIO,
+		.active_low = 1,
+		.key_code = SW_HEADPHONE_INSERT,
+		.enabled = true,
+	},
+	{
+		.accessory = OTHC_ANC_HEADSET,
+		.detect_flags = OTHC_MICBIAS_DETECT | OTHC_GPIO_DETECT,
+		.gpio = PM8058_LINE_IN_DET_GPIO,
+		.active_low = 1,
+		.key_code = SW_HEADPHONE_INSERT,
+		.enabled = true,
+	},
+	{
+		.accessory = OTHC_HEADPHONE,
+		.detect_flags = OTHC_MICBIAS_DETECT | OTHC_SWITCH_DETECT,
+		.key_code = SW_HEADPHONE_INSERT,
+		.enabled = true,
+	},
+	{
+		.accessory = OTHC_MICROPHONE,
+		.detect_flags = OTHC_GPIO_DETECT,
+		.gpio = PM8058_LINE_IN_DET_GPIO,
+		.active_low = 1,
+		.key_code = SW_MICROPHONE_INSERT,
+		.enabled = true,
+	},
+	{
+		.accessory = OTHC_HEADSET,
+		.detect_flags = OTHC_MICBIAS_DETECT,
+		.key_code = SW_HEADPHONE_INSERT,
+		.enabled = true,
+	},
+};
+
+static struct othc_switch_info switch_info[] = {
+	{
+		.min_adc_threshold = 0,
+		.max_adc_threshold = 100,
+		.key_code = KEY_PLAYPAUSE,
+	},
+	{
+		.min_adc_threshold = 100,
+		.max_adc_threshold = 200,
+		.key_code = KEY_REWIND,
+	},
+	{
+		.min_adc_threshold = 200,
+		.max_adc_threshold = 500,
+		.key_code = KEY_FASTFORWARD,
+	},
+};
+
+static struct othc_n_switch_config switch_config = {
+	.voltage_settling_time_ms = 0,
+	.num_adc_samples = 3,
+	.adc_channel = CHANNEL_ADC_HDSET,
+	.switch_info = switch_info,
+	.num_keys = ARRAY_SIZE(switch_info),
+	.default_sw_en = true,
+	.default_sw_idx = 0,
+};
+
+static struct hsed_bias_config hsed_bias_config = {
+	/* HSED mic bias config info */
+	.othc_headset = OTHC_HEADSET_NO,
+	.othc_lowcurr_thresh_uA = 100,
+	.othc_highcurr_thresh_uA = 500,
+	.othc_hyst_prediv_us = 3000,
+	.othc_period_clkdiv_us = 3000,
+	.othc_hyst_clk_us = 45000,
+	.othc_period_clk_us = 6000,
+	.othc_wakeup = 1,
+};
+
+static struct othc_hsed_config hsed_config_1 = {
+	.hsed_bias_config = &hsed_bias_config,
+	/*
+	 * The detection delay and switch reporting delay are
+	 * required to encounter a hardware bug (spurious switch
+	 * interrupts on slow insertion/removal of the headset).
+	 * This will introduce a delay in reporting the accessory
+	 * insertion and removal to the userspace.
+	 */
+	.detection_delay_ms = 1500,
+	/* Switch info */
+	.switch_debounce_ms = 1500,
+	.othc_support_n_switch = false,
+	.switch_config = &switch_config,
+	.ir_gpio = -1,
+	/* Accessory info */
+	.accessories_support = true,
+	.accessories = othc_accessories,
+	.othc_num_accessories = ARRAY_SIZE(othc_accessories),
+};
+
+static struct othc_regulator_config othc_reg = {
+	.regulator	= "8058_l5",
+	.max_uV		= 2850000,
+	.min_uV		= 2850000,
+};
+
+/* MIC_BIAS0 is configured as normal MIC BIAS */
+static struct pmic8058_othc_config_pdata othc_config_pdata_0 = {
+	.micbias_select = OTHC_MICBIAS_0,
+	.micbias_capability = OTHC_MICBIAS,
+	.micbias_enable = OTHC_SIGNAL_OFF,
+	.micbias_regulator = &othc_reg,
+};
+
+/* MIC_BIAS1 is configured as normal for OTHC */
+static struct pmic8058_othc_config_pdata othc_config_pdata_1 = {
+	.micbias_select = OTHC_MICBIAS_1,
+	.micbias_capability = OTHC_MICBIAS,
+	.micbias_enable = OTHC_SIGNAL_OFF,
+	.micbias_regulator = &othc_reg,
+};
+
+static void __init msm8x60_init_pm8058_othc(void)
+{
+	if (SOCINFO_VERSION_MAJOR(socinfo_get_version()) == 2) {
+		/* 3-switch headset supported only by V2 FFA and FLUID */
+		hsed_config_1.accessories_adc_support = true,
+		/* ADC based accessory detection works only on V2 and FLUID */
+		hsed_config_1.accessories_adc_channel = CHANNEL_ADC_HDSET,
+		hsed_config_1.othc_support_n_switch = true;
+	}
+}
+#endif
 
 static struct pm8xxx_rtc_platform_data pm8058_rtc_pdata = {
 	.rtc_write_enable       = false,
@@ -2126,9 +2274,11 @@ static struct pm8058_platform_data pm8058_platform_data = {
 	.mpp_pdata		= &pm8058_mpp_pdata,
 	.rtc_pdata		= &pm8058_rtc_pdata,
 	.pwrkey_pdata		= &pm8058_pwrkey_pdata,
-//	.othc0_pdata		= &othc_config_pdata_0,
-//	.othc1_pdata		= &othc_config_pdata_1,
-//	.othc2_pdata		= &othc_config_pdata_2,
+#if defined(CONFIG_PMIC8058_OTHC) || defined(CONFIG_PMIC8058_OTHC_MODULE)
+	.othc0_pdata		= &othc_config_pdata_0,
+	.othc1_pdata		= &othc_config_pdata_1,
+	.othc2_pdata		= NULL, /* No othc2 pdata */
+#endif
 	.pwm_pdata		= &pm8058_pwm_data,
 	.misc_pdata		= &pm8058_misc_pdata,
 #ifdef CONFIG_SENSORS_MSM_ADC
@@ -2391,7 +2541,11 @@ static void msm_auxpcm_init(void)
 static struct tpa2051d3_platform_data tpa2051d3_pdata = {
 	.gpio_tpa2051_spk_en = SHOOTER_AUD_SPK_ENO,
 	.spkr_cmd = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+#ifdef CONFIG_MACH_SHOOTER
 	.hsed_cmd = {0x00, 0x0C, 0x25, 0x57, 0x6D, 0x4D, 0x0D},
+#else
+	.hsed_cmd = {0x00, 0x0C, 0x25, 0x57, 0xCD, 0x4D, 0x0D},
+#endif
 	.rece_cmd = {0x00, 0x02, 0x25, 0x57, 0x0D, 0x4D, 0x0D},
 };
 
@@ -3916,6 +4070,10 @@ static void __init msm8x60_init(void)
 	msm8x60_init_ebi2();
 	msm8x60_init_gpiomux(msm8x60_htc_gpiomux_cfgs);
 	msm8x60_init_mmc();
+
+#if defined(CONFIG_PMIC8058_OTHC) || defined(CONFIG_PMIC8058_OTHC_MODULE)
+	msm8x60_init_pm8058_othc();
+#endif
 
 #ifdef CONFIG_MSM_DSPS
 	msm8x60_init_dsps();
