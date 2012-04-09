@@ -144,9 +144,9 @@ static void shooter_panel_power(int onoff)
 		}
 
 		if(isorise == 0)
-			ret = regulator_set_voltage(l12_3v, 2900000, 2900000);
+			ret = regulator_set_voltage(l12_3v, 3000000, 3000000);
 		else
-			ret = regulator_set_voltage(l12_3v, 2900000, 2900000);
+			ret = regulator_set_voltage(l12_3v, 3200000, 3200000);
 		if (ret) {
 			pr_err("%s: error setting l12_3v voltage\n", __func__);
 			goto fail;
