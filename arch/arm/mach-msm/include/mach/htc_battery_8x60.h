@@ -50,6 +50,8 @@
 #define MBAT_IN_LOW_TRIGGER		0
 #define MBAT_IN_HIGH_TRIGGER		1
 
+extern int radio_set_cable_status(int charger_type);
+
 struct battery_adc_reply {
 	u32 adc_voltage[ADC_REPLY_ARRAY_SIZE];
 	u32 adc_current[ADC_REPLY_ARRAY_SIZE];

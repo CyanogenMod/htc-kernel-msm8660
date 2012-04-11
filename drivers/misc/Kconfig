@@ -669,6 +669,13 @@ config AMP_TPA2051D3
 	help
 	  TI TPA2051D3 Speaker AMP Driver implemented by HTC.
 
+config CABLE_DETECT_8X60
+	boolean "Cable detect driver"
+	depends on ARCH_MSM8X60
+	default n
+	help
+	  Detect usb, ac and other accessories.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

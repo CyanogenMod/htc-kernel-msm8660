@@ -910,15 +910,16 @@ unsigned int get_radio_flag(void)
 	return radio_flag;
 }
 
-static unsigned int kernel_flag = 0;
+static unsigned long kernel_flag;
 int __init kernel_flag_init(char *s)
 {
-	kernel_flag = simple_strtoul(s, 0, 16);
+	int ret;
+	ret = strict_strtoul(s, 16, &kernel_flag);
 	return 1;
 }
 __setup("kernelflag=", kernel_flag_init);
 
-unsigned int get_kernel_flag(void)
+unsigned long get_kernel_flag(void)
 {
 	return kernel_flag;
 }

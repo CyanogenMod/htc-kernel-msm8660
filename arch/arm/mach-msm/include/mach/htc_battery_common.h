@@ -22,6 +22,7 @@
  * And it's also the same as htc_cable_status_update()
  */
 enum charger_type_t {
+	CHARGER_CLEAR = -2,
 	CHARGER_UNKNOWN = -1,
 	CHARGER_BATTERY = 0,
 	CHARGER_USB,

@@ -771,6 +771,13 @@ config HTC_BATT8x60
 	default n
 	bool "HTC battery driver for 8x60"
 
+config HTC_BATT_ALARM
+	bool "Enable 3.0V device shutdown mechanism"
+	depends on HAS_EARLYSUSPEND
+	default n
+	help
+	  Enable 3.0V triggeer level 0 shutdown rule
+
 config MSM_AMSS_VERSION
 	int
 	default 6210 if MSM_AMSS_VERSION_6210
@@ -1952,11 +1959,17 @@ config BT_MSM_PINTEST
 	  connectivity.
 
 config MSM_FAKE_BATTERY
-		depends on POWER_SUPPLY
-		default n
-		bool "MSM Fake Battery"
-		help
-		 Enables MSM fake battery driver.
+	depends on POWER_SUPPLY
+	default n
+	bool "MSM Fake Battery"
+	help
+	  Enables MSM fake battery driver.
+
+config SUPPORT_DQ_BATTERY
+	bool "Support DQ battery."
+	default n
+	help
+	  support DQ battery.
 
 config MSM_QDSP6_APR
 	bool "Audio QDSP6 APR support"
