@@ -23,7 +23,7 @@
 #include <linux/slab.h>
 #include <asm/io.h>
 #include <asm/gpio.h>
-#include <mach/board.h>
+#include <mach/board_htc.h>
 #include <asm/mach-types.h>
 #include <linux/atmel_qt602240.h>
 #include <linux/jiffies.h>
@@ -1005,6 +1005,7 @@ static int psensor_tp_status_handler_func(struct notifier_block *this,
 	return NOTIFY_OK;
 }
 
+/*
 #ifdef CONFIG_CABLE_DETECT_8X60
 static void cable_tp_status_handler_func(int connect_status)
 {
@@ -1091,6 +1092,7 @@ static void cable_tp_status_handler_func(int connect_status)
 	}
 }
 #endif
+*/
 
 static int read_object_table(struct atmel_ts_data *ts)
 {
@@ -1128,12 +1130,14 @@ static int read_object_table(struct atmel_ts_data *ts)
 	return 0;
 }
 
+/*
 #ifdef CONFIG_CABLE_DETECT_8X60
 static struct t_usb_status_notifier cable_status_handler = {
 	.name = "usb_tp_connected",
 	.func = cable_tp_status_handler_func,
 };
 #endif
+*/
 
 static struct notifier_block psensor_status_handler = {
 	.notifier_call = psensor_tp_status_handler_func,
@@ -1344,9 +1348,11 @@ static int atmel_ts_probe(struct i2c_client *client,
 		}
 		ts->filter_level = pdata->filter_level;
 
+/*
 #ifdef CONFIG_CABLE_DETECT_8X60
 		if (usb_get_connect_type())
 #endif
+*/
 			ts->status = CONNECTED;
 
 		ts->config_setting[NONE].config_T7
@@ -1624,9 +1630,11 @@ static int atmel_ts_probe(struct i2c_client *client,
 	dev_info(&client->dev, "Start touchscreen %s in interrupt mode\n",
 			ts->input_dev->name);
 
+/*
 #ifdef CONFIG_CABLE_DETECT_8X60
 	usb_register_notifier(&cable_status_handler);
 #endif
+*/
 	register_notifier_by_psensor(&psensor_status_handler);
 
 	return 0;

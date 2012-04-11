@@ -42,14 +42,22 @@ static int htc_battery_get_property(struct power_supply *psy,
 static ssize_t htc_battery_charger_ctrl_timer(struct device *dev,
 				    struct device_attribute *attr,
 				    const char *buf, size_t count);
-				    
-// TODO this seems to be the the fix o_0?
+
+#if 1
 #define HTC_BATTERY_ATTR(_name)                                             \
 {                                                                           \
-	.attr = { .name = #_name, .mode = S_IRUGO /*, .owner = THIS_MODULE */ },  \
+	.attr = { .name = #_name, .mode = S_IRUGO},  \
 	.show = htc_battery_show_property,                                  \
 	.store = NULL,                                                      \
 }
+#else
+#define HTC_BATTERY_ATTR(_name)                                             \
+{                                                                           \
+	.attr = { .name = #_name, .mode = S_IRUGO, .owner = THIS_MODULE },  \
+	.show = htc_battery_show_property,                                  \
+	.store = NULL,                                                      \
+}
+#endif
 
 struct htc_battery_core_info {
 	int present;
@@ -122,6 +130,17 @@ static struct power_supply htc_power_supplies[] = {
 	},
 };
 
+static BLOCKING_NOTIFIER_HEAD(wireless_charger_notifier_list);
+int register_notifier_wireless_charger(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&wireless_charger_notifier_list, nb);
+}
+
+int unregister_notifier_wireless_charger(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&wireless_charger_notifier_list, nb);
+}
+
 /*
  *  For Off-mode charging animation,
  *  add a function for display driver to inform the charging animation mode.
@@ -133,7 +152,13 @@ int htc_battery_get_zcharge_mode(void)
 }
 static int __init enable_zcharge_setup(char *str)
 {
-	int cal = simple_strtol(str, NULL, 0);
+	int rc;
+	unsigned long cal;
+
+	rc = strict_strtoul(str, 10, &cal);
+
+	if (rc)
+		return rc;
 
 	zcharge_enabled = cal;
 	return 1;
@@ -271,6 +296,7 @@ static ssize_t htc_battery_charger_switch(struct device *dev,
 	if (rc)
 		return rc;
 
+	BATT_LOG("Set charger_control:%lu", enable);
 	if (enable >= END_CHARGER)
 		return -EINVAL;
 
@@ -279,22 +305,12 @@ static ssize_t htc_battery_charger_switch(struct device *dev,
 		return -ENOENT;
 	}
 
-	if (enable == STOP_CHARGER) {
-		rc = battery_core_info.func.func_charger_control(STOP_CHARGER);
-		if (rc < 0) {
-			BATT_ERR("charger control failed!");
-			return rc;
-		}
-		charger_ctrl_stat = STOP_CHARGER;
-	} else if (enable == ENABLE_CHARGER) {
-		rc = battery_core_info.func.func_charger_control(
-							    ENABLE_CHARGER);
-		if (rc < 0) {
-			BATT_ERR("charger control failed!");
-			return rc;
-		}
-		charger_ctrl_stat = ENABLE_CHARGER;
+	rc = battery_core_info.func.func_charger_control(enable);
+	if (rc < 0) {
+		BATT_ERR("charger control failed!");
+		return rc;
 	}
+	charger_ctrl_stat = enable;
 
 	alarm_cancel(&batt_charger_ctrl_alarm);
 
@@ -350,7 +366,7 @@ htc_attrs_failed:
 		device_remove_file(dev, &htc_battery_attrs[i]);
 htc_delta_attrs_failed:
 	while (j--)
-		device_remove_file(dev, &htc_set_delta_attrs[i]);
+		device_remove_file(dev, &htc_set_delta_attrs[j]);
 succeed:
 	return rc;
 }
@@ -557,6 +573,7 @@ int htc_battery_core_update_changed(void)
 	int is_send_batt_uevent = 0;
 	int is_send_usb_uevent = 0;
 	int is_send_ac_uevent = 0;
+	int is_send_wireless_charger_uevent = 0;
 
 	if (battery_register) {
 		BATT_ERR("No battery driver exists.");
@@ -581,9 +598,13 @@ int htc_battery_core_update_changed(void)
 		if (CHARGER_USB == battery_core_info.rep.charging_source ||
 			CHARGER_USB == new_batt_info_rep.charging_source)
 			is_send_usb_uevent = 1;
-		if (CHARGER_AC <= battery_core_info.rep.charging_source ||
-			CHARGER_AC <= new_batt_info_rep.charging_source)
+		if (CHARGER_AC == battery_core_info.rep.charging_source ||
+			CHARGER_AC == new_batt_info_rep.charging_source)
 			is_send_ac_uevent = 1;
+		if (CHARGER_WIRELESS == battery_core_info.rep.charging_source ||
+			CHARGER_WIRELESS == new_batt_info_rep.charging_source)
+			is_send_wireless_charger_uevent = 1;
+
 	}
 	if ((!is_send_batt_uevent) &&
 		((battery_core_info.rep.level != new_batt_info_rep.level) ||
@@ -643,21 +664,18 @@ int htc_battery_core_update_changed(void)
 	battery_core_info.update_time = jiffies;
 	mutex_unlock(&battery_core_info.info_lock);
 
-	BATT_LOG("ID=%d, level=%d, vol=%d, temp=%d, curr=%d, "
-		"dis_curr=%d, chg_src=%d, chg_en=%d, over_vchg=%d, batt_state=%d, over_loading=%d, charge_full=%d",
+	BATT_LOG("ID=%d, level=%d, vol=%d, temp=%d, batt_current=%d, "
+		"chg_src=%d, chg_en=%d, full_bat=%d, over_vchg=%d, batt_state=%d",
 			battery_core_info.rep.batt_id,
 			battery_core_info.rep.level,
 			battery_core_info.rep.batt_vol,
 			battery_core_info.rep.batt_temp,
 			battery_core_info.rep.batt_current,
-			battery_core_info.rep.batt_discharg_current,
 			battery_core_info.rep.charging_source,
 			battery_core_info.rep.charging_enabled,
+			battery_core_info.rep.full_bat,
 			battery_core_info.rep.over_vchg,
-			battery_core_info.rep.batt_state,
-			battery_over_loading,
-			battery_core_info.htc_charge_full
-			);
+			battery_core_info.rep.batt_state);
 
 	/* send uevent if need */
 	if (is_send_batt_uevent) {
@@ -671,6 +689,10 @@ int htc_battery_core_update_changed(void)
 	if (is_send_ac_uevent) {
 		power_supply_changed(&htc_power_supplies[AC_SUPPLY]);
 		BATT_LOG("power_supply_changed: ac");
+	}
+	if (is_send_wireless_charger_uevent) {
+		power_supply_changed(&htc_power_supplies[WIRELESS_SUPPLY]);
+		BATT_LOG("power_supply_changed: wireless");
 	}
 
 	return 0;

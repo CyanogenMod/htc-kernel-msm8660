@@ -54,6 +54,41 @@ enum {
 	MSM_SERIAL_NUM,
 };
 
+enum {
+	KERNEL_FLAG_WDOG_DISABLE = BIT(0),
+	KERNEL_FLAG_SERIAL_HSL_ENABLE = BIT(1),
+	KERNEL_FLAG_RESERVED_2 = BIT(2),
+	KERNEL_FLAG_WDOG_FIQ = BIT(3),
+	KERNEL_FLAG_KMEMLEAK = BIT(4),
+	KERNEL_FLAG_RMT_STORAGE = BIT(5),
+	KERNEL_FLAG_MDM_CHARM_DEBUG = BIT(6),
+	KERNEL_FLAG_MSM_SMD_DEBUG = BIT(7),
+	KERNEL_FLAG_RESERVED_8 = BIT(8),
+	KERNEL_FLAG_RESERVED_9 = BIT(9),
+	KERNEL_FLAG_RESERVED_10 = BIT(10),
+	KERNEL_FLAG_RESERVED_11 = BIT(11),
+	KERNEL_FLAG_RESERVED_12 = BIT(12),
+	KERNEL_FLAG_RESERVED_13 = BIT(13),
+	KERNEL_FLAG_RESERVED_14 = BIT(14),
+	KERNEL_FLAG_TEST_PWR_SUPPLY = BIT(15),
+	KERNEL_FLAG_RIL_DBG_DMUX = BIT(16),
+	KERNEL_FLAG_RIL_DBG_RMNET = BIT(17),
+	KERNEL_FLAG_RIL_DBG_CMUX = BIT(18),
+	KERNEL_FLAG_RIL_DBG_DATA_LPM = BIT(19),
+	KERNEL_FLAG_RIL_DBG_CTL = BIT(20),
+	KERNEL_FLAG_RIL_DBG_ALDEBUG_LAWDATA = BIT(21),
+	KERNEL_FLAG_RIL_DBG_MEMCPY = BIT(22),
+	KERNEL_FLAG_RIL_DBG_RPC = BIT(23),
+	KERNEL_FLAG_RESERVED_24 = BIT(24),
+	KERNEL_FLAG_PM_MONITOR = BIT(25),
+	KERNEL_FLAG_ENABLE_FAST_CHARGE = BIT(26),
+	KERNEL_FLAG_RESERVED_27 = BIT(27),
+	KERNEL_FLAG_RESERVED_28 = BIT(28),
+	KERNEL_FLAG_RESERVED_29 = BIT(29),
+	KERNEL_FLAG_RESERVED_30 = BIT(30),
+	KERNEL_FLAG_GPIO_DUMP = BIT(31),
+};
+
 /* common init routines for use by arch/arm/mach-msm/board-*.c */
 
 void __init msm_add_usb_devices(void (*phy_reset) (void));
@@ -70,6 +105,8 @@ int __init msm_add_serial_devices(unsigned uart);
 
 #if defined(CONFIG_USB_FUNCTION_MSM_HSUSB) \
 	|| defined(CONFIG_USB_MSM_72K) || defined(CONFIG_USB_MSM_72K_MODULE)
+
+void msm_otg_set_vbus_state(int online);
 
 enum usb_connect_type {
 	CONNECT_TYPE_CLEAR = -2,
@@ -99,5 +136,13 @@ int parse_tag_engineerid(const struct tag * tags);
 int __init parse_tag_memsize(const struct tag *tags);
 
 char *board_serialno(void);
+unsigned long get_kernel_flag(void);
 
+struct t_cable_status_notifier{
+	struct list_head cable_notifier_link;
+	const char *name;
+	void (*func)(int cable_type);
+};
+int cable_detect_register_notifier(struct t_cable_status_notifier *);
+static LIST_HEAD(g_lh_calbe_detect_notifier_list);
 #endif

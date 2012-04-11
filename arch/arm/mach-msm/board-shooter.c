@@ -19,6 +19,7 @@
 #include <linux/msm-charger.h>
 #include <linux/m_adcproc.h>
 #include <linux/proc_fs.h>
+#include <linux/tps65200.h>
 #include <linux/spi/spi.h>
 
 #ifdef CONFIG_USB_G_ANDROID
@@ -197,7 +198,7 @@ static struct platform_device msm_rpm_log_device = {
 static struct htc_battery_platform_data htc_battery_pdev_data = {
 	.guage_driver = GUAGE_NONE,
 	.gpio_mbat_in = MSM_GPIO_TO_INT(SHOOTER_GPIO_MBAT_IN),
-	.gpio_mbat_in_trigger_level = MBAT_IN_HIGH_TRIGGER,
+	.gpio_mbat_in_trigger_level = MBAT_IN_LOW_TRIGGER,
 	.charger = SWITCH_CHARGER_TPS65200,
 	.mpp_data = {
 		{PM8058_MPP_PM_TO_SYS(XOADC_MPP_3), PM8XXX_MPP_AIN_AMUX_CH6},
@@ -1694,6 +1695,12 @@ static struct msm_adc_channels msm_adc_channels_data[] = {
 		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE2, scale_batt_therm},
 	{"batt_id", CHANNEL_ADC_BATT_ID, 0, &xoadc_fn, CHAN_PATH_TYPE9,
 		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE2, scale_default},
+	{"ref_625mv", CHANNEL_ADC_625_REF, 0, &xoadc_fn, CHAN_PATH_TYPE15,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE2, scale_default},
+	{"ref_1250mv", CHANNEL_ADC_1250_REF, 0, &xoadc_fn, CHAN_PATH_TYPE13,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE2, scale_default},
+	{"ref_325mv", CHANNEL_ADC_325_REF, 0, &xoadc_fn, CHAN_PATH_TYPE14,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE2, scale_default},
 };
 
 static struct msm_adc_platform_data msm_adc_pdata = {
@@ -2586,11 +2593,41 @@ struct i2c_registry {
 	int                    len;
 };
 
+static struct tps65200_platform_data tps65200_data = {
+	.gpio_chg_stat = PM8058_GPIO_IRQ(PM8058_IRQ_BASE, SHOOTER_CHG_STAT),
+	.gpio_chg_int  = MSM_GPIO_TO_INT(SHOOTER_GPIO_CHG_INT),
+};
+
+#ifdef CONFIG_SUPPORT_DQ_BATTERY
+static int __init check_dq_setup(char *str)
+{
+	if (!strcmp(str, "PASS"))
+		tps65200_data.dq_result = 1;
+	else
+		tps65200_data.dq_result = 0;
+
+	return 1;
+}
+__setup("androidboot.dq=", check_dq_setup);
+#endif
+
+static struct i2c_board_info msm_tps_65200_boardinfo[] __initdata = {
+	{
+		I2C_BOARD_INFO("tps65200", 0xD4 >> 1),
+		.platform_data = &tps65200_data,
+	},
+};
+
 static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 	{
 		MSM_GSBI5_QUP_I2C_BUS_ID,
 		msm_i2c_gsbi5_info,
 		ARRAY_SIZE(msm_i2c_gsbi5_info),
+	},
+	{
+		MSM_GSBI7_QUP_I2C_BUS_ID,
+		msm_tps_65200_boardinfo,
+		ARRAY_SIZE(msm_tps_65200_boardinfo),
 	},
 #ifdef CONFIG_MSM8X60_AUDIO
 	{
