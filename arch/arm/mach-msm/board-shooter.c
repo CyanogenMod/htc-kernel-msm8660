@@ -468,10 +468,10 @@ static void pmic_id_detect(struct work_struct *w)
 static irqreturn_t pmic_id_on_irq(int irq, void *data)
 {
 	/*
- * 	 * Spurious interrupts are observed on pmic gpio line
- * 	 	 * even though there is no state change on USB ID. Schedule the
- * 	 	 	 * work to to allow debounce on gpio
- * 	 	 	 	 */
+	 * Spurious interrupts are observed on pmic gpio line
+	 * even though there is no state change on USB ID. Schedule the
+	 * work to to allow debounce on gpio
+	 */
 	schedule_delayed_work(&pmic_id_det, USB_PMIC_ID_DET_DELAY);
 
 	return IRQ_HANDLED;
@@ -523,19 +523,9 @@ static int msm_hsusb_pmic_id_notif_init(void (*callback)(int online), int init)
 	if (!callback)
 		return -EINVAL;
 
-	if (machine_is_msm8x60_fluid())
-		return -ENOTSUPP;
-
 	if (SOCINFO_VERSION_MAJOR(socinfo_get_version()) != 2) {
 		pr_debug("%s: USB_ID pin is not routed to PMIC"
 					"on V1 surf/ffa\n", __func__);
-		return -ENOTSUPP;
-	}
-
-	if ((machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa() ||
-			machine_is_msm8x60_ffa()) && !pmic_id_notif_supported) {
-		pr_debug("%s: USB_ID is not routed to PMIC"
-			"on V2 ffa\n", __func__);
 		return -ENOTSUPP;
 	}
 
@@ -756,19 +746,6 @@ static int msm_hsusb_ldo_enable(int on)
  }
 #endif
 #ifdef CONFIG_USB_EHCI_MSM_72K
-#if 0
-defined(CONFIG_SMB137B_CHARGER) || defined(CONFIG_SMB137B_CHARGER_MODULE)
-static void msm_hsusb_smb137b_vbus_power(unsigned phy_info, int on)
-{
-	static int vbus_is_on;
-
-	/* If VBUS is already on (or off), do nothing. */
-	if (on == vbus_is_on)
-		return;
-	smb137b_otg_power(on);
-	vbus_is_on = on;
-}
-#endif
 static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 {
 	static struct regulator *votg_5v_switch;
@@ -825,9 +802,9 @@ static struct msm_usb_host_platform_data msm_usb_host_pdata = {
 #if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM_72K)
 static struct msm_otg_platform_data msm_otg_pdata = {
 	/* if usb link is in sps there is no need for
- * 	 * usb pclk as dayatona fabric clock will be
- * 	 	 * used instead
- * 	 	 	 */
+	 * usb pclk as dayatona fabric clock will be
+	 * used instead
+	 */
 	.pemp_level		 = PRE_EMPHASIS_WITH_20_PERCENT,
 	.cdr_autoreset		 = CDR_AUTO_RESET_DISABLE,
 	.se1_gating		 = SE1_GATING_DISABLE,
@@ -1100,9 +1077,9 @@ static struct msm_spm_platform_data msm_spm_data[] __initdata = {
 #ifdef CONFIG_PMIC8901
 #define PM8901_GPIO_INT           91
 /*
- *  * Consumer specific regulator names:
- *   *			 regulator name		consumer dev_name
- *    */
+ * Consumer specific regulator names:
+ *			 regulator name		consumer dev_name
+ */
 static struct regulator_consumer_supply vreg_consumers_8901_USB_OTG[] = {
 	REGULATOR_SUPPLY("8901_usb_otg",	NULL),
 };
@@ -3199,7 +3176,6 @@ static struct msm_i2c_platform_data msm_gsbi7_qup_i2c_pdata = {
 	.msm_i2c_config_gpio = gsbi_qup_i2c_gpio_config,
 };
 
-
 static struct msm_i2c_platform_data msm_gsbi10_qup_i2c_pdata = {
 	.clk_freq = 384000,
 	.src_clk_rate = 24000000,
@@ -3236,76 +3212,6 @@ static void __init msm8x60_map_io(void)
 
 	if (socinfo_init() < 0)
 		printk(KERN_ERR "%s: socinfo_init() failed!",   __func__);
-}
-
-/*
- * Most segments of the EBI2 bus are disabled by default.
- */
-static void __init msm8x60_init_ebi2(void)
-{
-	uint32_t ebi2_cfg;
-	void *ebi2_cfg_ptr;
-	struct clk *mem_clk = clk_get_sys("msm_ebi2", "mem_clk");
-
-	if (IS_ERR(mem_clk)) {
-		pr_err("%s: clk_get_sys(%s,%s), failed", __func__,
-					"msm_ebi2", "mem_clk");
-		return;
-	}
-	clk_enable(mem_clk);
-	clk_put(mem_clk);
-
-	ebi2_cfg_ptr = ioremap_nocache(0x1a100000, sizeof(uint32_t));
-	if (ebi2_cfg_ptr != 0) {
-		ebi2_cfg = readl_relaxed(ebi2_cfg_ptr);
-
-		if (machine_is_msm8x60_surf() || machine_is_msm8x60_ffa() ||
-			machine_is_msm8x60_fluid() ||
-			machine_is_msm8x60_dragon())
-			ebi2_cfg |= (1 << 4) | (1 << 5); /* CS2, CS3 */
-		else if (machine_is_msm8x60_sim())
-			ebi2_cfg |= (1 << 4); /* CS2 */
-		else if (machine_is_msm8x60_rumi3())
-			ebi2_cfg |= (1 << 5); /* CS3 */
-
-		writel_relaxed(ebi2_cfg, ebi2_cfg_ptr);
-		iounmap(ebi2_cfg_ptr);
-	}
-
-	if (machine_is_msm8x60_surf() || machine_is_msm8x60_ffa() ||
-	    machine_is_msm8x60_fluid() || machine_is_msm8x60_dragon() ||
-	    machine_is_shooter()) {
-		ebi2_cfg_ptr = ioremap_nocache(0x1a110000, SZ_4K);
-		if (ebi2_cfg_ptr != 0) {
-			/* EBI2_XMEM_CFG:PWRSAVE_MODE off */
-			writel_relaxed(0UL, ebi2_cfg_ptr);
-
-			/* CS2: Delay 9 cycles (140ns@64MHz) between SMSC
-			 * LAN9221 Ethernet controller reads and writes.
-			 * The lowest 4 bits are the read delay, the next
-			 * 4 are the write delay. */
-			writel_relaxed(0x031F1C99, ebi2_cfg_ptr + 0x10);
-#if defined(CONFIG_USB_PEHCI_HCD) || defined(CONFIG_USB_PEHCI_HCD_MODULE)
-			/*
-			 * RECOVERY=5, HOLD_WR=1
-			 * INIT_LATENCY_WR=1, INIT_LATENCY_RD=1
-			 * WAIT_WR=1, WAIT_RD=2
-			 */
-			writel_relaxed(0x51010112, ebi2_cfg_ptr + 0x14);
-			/*
-			 * HOLD_RD=1
-			 * ADV_OE_RECOVERY=0, ADDR_HOLD_ENA=1
-			 */
-			writel_relaxed(0x01000020, ebi2_cfg_ptr + 0x34);
-#else
-			/* EBI2 CS3 muxed address/data,
-			   two cyc addr enable */
-			writel_relaxed(0xA3030020, ebi2_cfg_ptr + 0x34);
-
-#endif
-			iounmap(ebi2_cfg_ptr);
-		}
-	}
 }
 
 #define GPIO_SDC_WP (GPIO_EXPANDER_GPIO_BASE + (16 * 1) + 6)
@@ -4221,7 +4127,6 @@ static void __init msm8x60_init(void)
 	platform_add_devices(early_devices, ARRAY_SIZE(early_devices));
 
 	acpuclk_init(&acpuclk_8x60_soc_data);
-	msm8x60_init_ebi2();
 	msm8x60_init_gpiomux(msm8x60_htc_gpiomux_cfgs);
 	msm8x60_init_mmc();
 
