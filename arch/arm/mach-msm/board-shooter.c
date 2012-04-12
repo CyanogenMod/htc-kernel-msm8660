@@ -40,6 +40,10 @@
 #include <mach/htc_battery_core.h>
 #include <mach/htc_battery_8x60.h>
 #include <mach/htc_bdaddress.h>
+#include <mach/htc_headset_8x60.h>
+#include <mach/htc_headset_gpio.h>
+#include <mach/htc_headset_mgr.h>
+#include <mach/htc_headset_pmic.h>
 #include <mach/mpp.h>
 #include <mach/msm_bus_board.h>
 #include <mach/msm_dsps.h>
@@ -198,7 +202,11 @@ static struct platform_device msm_rpm_log_device = {
 static struct htc_battery_platform_data htc_battery_pdev_data = {
 	.guage_driver = GUAGE_NONE,
 	.gpio_mbat_in = MSM_GPIO_TO_INT(SHOOTER_GPIO_MBAT_IN),
+#ifdef CONFIG_MACH_SHOOTER
+	.gpio_mbat_in_trigger_level = MBAT_IN_HIGH_TRIGGER,
+#else
 	.gpio_mbat_in_trigger_level = MBAT_IN_LOW_TRIGGER,
+#endif
 	.charger = SWITCH_CHARGER_TPS65200,
 	.mpp_data = {
 		{PM8058_MPP_PM_TO_SYS(XOADC_MPP_3), PM8XXX_MPP_AIN_AMUX_CH6},
@@ -1716,6 +1724,118 @@ static struct platform_device msm_adc_device = {
 	},
 };
 
+/* HTC_HEADSET_GPIO Driver */
+static struct htc_headset_gpio_platform_data htc_headset_gpio_data = {
+	.hpin_gpio		= SHOOTER_GPIO_AUD_HP_DET,
+	.key_enable_gpio	= 0,
+	.mic_select_gpio	= 0,
+};
+
+static struct platform_device htc_headset_gpio = {
+	.name   = "HTC_HEADSET_GPIO",
+	.id     = -1,
+	.dev    = {
+		.platform_data = &htc_headset_gpio_data,
+	},
+};
+
+/* HTC_HEADSET_PMIC Driver */
+static struct htc_headset_pmic_platform_data htc_headset_pmic_data = {
+	.driver_flag		= 0,
+	.hpin_gpio		= 0,
+	.hpin_irq		= 0,
+	.key_gpio		= 0,
+	.key_irq		= 0,
+	.key_enable_gpio	= 0,
+	.adc_mic_bias		= {0, 0},
+	.adc_remote		= {0, 0, 0, 0, 0, 0},
+};
+
+static struct platform_device htc_headset_pmic = {
+	.name	= "HTC_HEADSET_PMIC",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &htc_headset_pmic_data,
+	},
+};
+
+/* HTC_HEADSET_8X60 Driver */
+static struct htc_headset_8x60_platform_data htc_headset_8x60_data = {
+	.adc_mpp	= PM8058_MPP_PM_TO_SYS(XOADC_MPP_10),
+	.adc_amux	= PM_MPP_AIN_AMUX_CH5,
+	.adc_mic_bias	= {HS_DEF_MIC_ADC_15_BIT_MIN,
+			   HS_DEF_MIC_ADC_15_BIT_MAX},
+	.adc_remote	= {0, 1251, 1430, 3411, 4543, 6807},
+};
+
+static struct htc_headset_8x60_platform_data htc_headset_8x60_data_xb = {
+	.adc_mpp	= PM8058_MPP_PM_TO_SYS(XOADC_MPP_10),
+	.adc_amux	= PM_MPP_AIN_AMUX_CH5,
+	.adc_mic_bias	= {14375, 26643},
+	.adc_remote	= {0, 1219, 1440, 3862, 4231, 6783},
+};
+
+static struct platform_device htc_headset_8x60 = {
+	.name	= "HTC_HEADSET_8X60",
+	.id	= -1,
+	.dev	= {
+		.platform_data  = &htc_headset_8x60_data,
+	},
+};
+
+/* HTC_HEADSET_MGR Driver */
+static struct platform_device *headset_devices[] = {
+	&htc_headset_pmic,
+	&htc_headset_8x60,
+	&htc_headset_gpio,
+	/* Please put the headset detection driver on the last */
+};
+
+static struct headset_adc_config htc_headset_mgr_config[] = {
+	{
+		.type = HEADSET_MIC,
+		.adc_max = 27404,
+		.adc_min = 22294,
+	},
+	{
+		.type = HEADSET_BEATS,
+		.adc_max = 22293,
+		.adc_min = 7976,
+	},
+	{
+		.type = HEADSET_MIC,
+		.adc_max = 7975,
+		.adc_min = 666,
+	},
+	{
+		.type = HEADSET_NO_MIC,
+		.adc_max = 665,
+		.adc_min = 0,
+	},
+};
+
+static struct htc_headset_mgr_platform_data htc_headset_mgr_data = {
+	.driver_flag		= 0,
+	.headset_devices_num	= ARRAY_SIZE(headset_devices),
+	.headset_devices	= headset_devices,
+	.headset_config_num	= 0,
+	.headset_config		= 0,
+};
+
+static struct platform_device htc_headset_mgr = {
+	.name	= "HTC_HEADSET_MGR",
+	.id	= -1,
+	.dev	= {
+		.platform_data  = &htc_headset_mgr_data,
+	},
+};
+
+static void headset_device_register(void)
+{
+	pr_info("[HS_BOARD] (%s) Headset device register\n", __func__);
+	platform_device_register(&htc_headset_mgr);
+};
+
 static void pmic8058_xoadc_mpp_config(void)
 {
 	/* Do not set mpp to amux in here.
@@ -1915,20 +2035,7 @@ static int pm8058_gpios_init(void)
 			}
 		},
 		{ /* Audio Receiver Amplifier */
-			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_HP_EN),	/* 17 */
-			{
-				.direction	= PM_GPIO_DIR_OUT,
-				.output_value	= 0,
-				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
-				.pull		= PM_GPIO_PULL_NO,
-				.out_strength	= PM_GPIO_STRENGTH_HIGH,
-				.function	= PM_GPIO_FUNC_NORMAL,
-				.vin_sel	= 6,	/* LDO5 2.85 V */
-				.inv_int_pol	= 0,
-			}
-		},
-		{ /* Audio Speaker Amplifier */
-			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_SPK_ENO),	/* 18 */
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_HP_EN),
 			{
 				.direction	= PM_GPIO_DIR_OUT,
 				.output_value	= 0,
@@ -2071,7 +2178,7 @@ static int pm8058_gpios_init(void)
 			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_REMO_PRES),
 			{
 				.direction      = PM_GPIO_DIR_IN,
-				.pull           = PM_GPIO_PULL_NO,
+				.pull           = PM_GPIO_PULL_UP_1P5,
 				.vin_sel        = PM8058_GPIO_VIN_L5, /* 2.85 V */
 				.function       = PM_GPIO_FUNC_NORMAL,
 				.inv_int_pol    = 0,
@@ -2183,11 +2290,11 @@ static struct hsed_bias_config hsed_bias_config = {
 	/* HSED mic bias config info */
 	.othc_headset = OTHC_HEADSET_NO,
 	.othc_lowcurr_thresh_uA = 100,
-	.othc_highcurr_thresh_uA = 500,
-	.othc_hyst_prediv_us = 3000,
-	.othc_period_clkdiv_us = 3000,
-	.othc_hyst_clk_us = 45000,
-	.othc_period_clk_us = 6000,
+	.othc_highcurr_thresh_uA = 600,
+	.othc_hyst_prediv_us = 7800,
+	.othc_period_clkdiv_us = 62500,
+	.othc_hyst_clk_us = 121000,
+	.othc_period_clk_us = 312500,
 	.othc_wakeup = 1,
 };
 
@@ -2291,6 +2398,16 @@ static struct pm8058_platform_data pm8058_platform_data = {
 #ifdef CONFIG_SENSORS_MSM_ADC
 	.xoadc_pdata		= &pm8058_xoadc_pdata,
 #endif
+	.keypad_pdata		= NULL, /* No keypad pdata */
+	.charger_pdata		= NULL, /* No charger pdata */
+//	.leds_pdata		= &pm8058_flash_leds_data,
+//	.vibrator_pdata		= &pm8058_vib_pdata,
+
+	.regulator_pdatas	= NULL,
+	.num_regulators		= 0,
+
+	.xo_buffer_pdata	= NULL,
+	.num_xo_buffers		= 0,
 };
 
 #ifdef CONFIG_MSM_SSBI
@@ -4112,6 +4229,20 @@ static void __init msm8x60_init(void)
 	msm8x60_init_pm8058_othc();
 #endif
 
+	/* Accessory */
+	if (system_rev >= 1) {
+		htc_headset_pmic_data.key_gpio =
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_REMO_PRES);
+		htc_headset_pmic_data.key_enable_gpio =
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_REMO_EN);
+		htc_headset_8x60.dev.platform_data =
+			&htc_headset_8x60_data_xb;
+		htc_headset_mgr_data.headset_config_num =
+			ARRAY_SIZE(htc_headset_mgr_config);
+		htc_headset_mgr_data.headset_config = htc_headset_mgr_config;
+		printk(KERN_INFO "[HS_BOARD] (%s) Set MEMS config\n", __func__);
+	}
+
 #ifdef CONFIG_MSM_DSPS
 	msm8x60_init_dsps();
 #endif
@@ -4142,6 +4273,7 @@ static void __init msm8x60_init(void)
 
 	shooter_init_keypad();
 	shooter_wifi_init();
+	headset_device_register();
 
 	properties_kobj = kobject_create_and_add("board_properties", NULL);
 	if (properties_kobj)

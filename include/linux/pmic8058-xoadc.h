@@ -17,6 +17,7 @@
 
 #include <linux/kernel.h>
 #include <linux/list.h>
+#include <linux/mutex.h>
 #include <linux/workqueue.h>
 
 struct xoadc_conv_state {
