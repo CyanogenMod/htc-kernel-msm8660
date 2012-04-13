@@ -1022,6 +1022,7 @@ static int __devinit pm8058_xoadc_probe(struct platform_device *pdev)
 	adc_pmic->adc_prop = pdata->xoadc_prop;
 	adc_pmic->xoadc_num = pdata->xoadc_num;
 	adc_pmic->xoadc_queue_count = 0;
+	adc_pmic->done = NULL;
 
 	platform_set_drvdata(pdev, adc_pmic);
 
@@ -1054,11 +1055,6 @@ static int __devinit pm8058_xoadc_probe(struct platform_device *pdev)
 	adc_pmic->conv_slot_request->context =
 		&adc_pmic->conv_queue_elements[0];
 
-	mutex_init(&mpp_mutex);
-	mutex_init(&adc_mutex);
-	mutex_init(&list_mutex);
-	mutex_init(&mlock);
-
 	mutex_init(&adc_pmic->conv_slot_request->list_lock);
 	INIT_LIST_HEAD(&adc_pmic->conv_slot_request->slots);
 
@@ -1073,6 +1069,11 @@ static int __devinit pm8058_xoadc_probe(struct platform_device *pdev)
 	}
 
 	adc_pmic->conv_queue_list = &adc_pmic->conv[1];
+
+	mutex_init(&mpp_mutex);
+	mutex_init(&adc_mutex);
+	mutex_init(&list_mutex);
+	mutex_init(&mlock);
 
 	mutex_init(&adc_pmic->conv_queue_list->list_lock);
 	INIT_LIST_HEAD(&adc_pmic->conv_queue_list->slots);
@@ -1114,6 +1115,10 @@ static int __devinit pm8058_xoadc_probe(struct platform_device *pdev)
 
 	xoadc_initialized = true;
 	xoadc_calib_first_adc = false;
+	xoadc_calib_adc = false;
+
+	queue_count = 0;
+	debug_counter = 0;
 
 	return 0;
 

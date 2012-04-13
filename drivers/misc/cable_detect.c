@@ -207,7 +207,7 @@ static void check_vbus_in(struct work_struct *w)
 	struct cable_detect_info *pInfo = container_of(
 			w, struct cable_detect_info, vbus_detect_work.work);
 
-	level = gpio_get_value(pInfo->vbus_mpp_gpio);
+	level = gpio_get_value_cansleep(pInfo->vbus_mpp_gpio);
 	vbus_in = (level) ? 0:1;
 	CABLE_INFO("%s: vbus = %d, vbus_in = %d\n", __func__, vbus, vbus_in);
 

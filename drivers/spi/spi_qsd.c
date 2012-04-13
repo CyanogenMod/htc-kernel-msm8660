@@ -159,7 +159,7 @@ enum msm_spi_state {
 #define SPI_NUM_CHIPSELECTS           4
 #define SPI_SUPPORTED_MODES  (SPI_CPOL | SPI_CPHA | SPI_CS_HIGH | SPI_LOOP)
 
-#define SPI_DELAY_THRESHOLD           1
+#define SPI_DELAY_THRESHOLD           5
 /* Default timeout is 10 milliseconds */
 #define SPI_DEFAULT_TIMEOUT           10
 /* 250 microseconds */

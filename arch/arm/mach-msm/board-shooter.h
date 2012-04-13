@@ -198,10 +198,11 @@
 #define SHOOTER_GPIO_BT_RESET_N        (142)
 
 /* USB */
-#define SHOOTER_GPIO_USB_ID        (63)
-#define SHOOTER_GPIO_MHL_RESET        (70)
-#define SHOOTER_GPIO_MHL_USB_EN         (139)
-#define SHOOTER_GPIO_MHL_USB_SW        (99)
+#define SHOOTER_GPIO_USB_ID             (63)
+#define SHOOTER_GPIO_MHL_RESET          (70)
+#define SHOOTER_GPIO_MHL_INT            (71)
+#define SHOOTER_GPIO_MHL_USB_EN        (139)
+#define SHOOTER_GPIO_MHL_USB_SW         (99)
 
 /* Camera */
 

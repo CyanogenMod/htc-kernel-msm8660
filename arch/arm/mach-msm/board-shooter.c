@@ -35,6 +35,7 @@
 #include <mach/board.h>
 #include <mach/board_htc.h>
 #include <mach/board-msm8660.h>
+#include <mach/cable_detect.h>
 #include <mach/cpuidle.h>
 #include <mach/gpiomux.h>
 #include <mach/htc_battery_core.h>
@@ -805,21 +806,22 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	 * usb pclk as dayatona fabric clock will be
 	 * used instead
 	 */
-	.pemp_level		 = PRE_EMPHASIS_WITH_20_PERCENT,
-	.cdr_autoreset		 = CDR_AUTO_RESET_DISABLE,
-	.se1_gating		 = SE1_GATING_DISABLE,
-	.bam_disable		 = 1,
+	.pemp_level		= PRE_EMPHASIS_WITH_20_PERCENT,
+	.cdr_autoreset		= CDR_AUTO_RESET_DISABLE,
+	.se1_gating		= SE1_GATING_DISABLE,
+	.bam_disable		= 1,
 #ifdef CONFIG_USB_EHCI_MSM_72K
-	.pmic_id_notif_init = msm_hsusb_pmic_id_notif_init,
-	.phy_id_setup_init = msm_hsusb_phy_id_setup_init,
+	.pmic_id_notif_init	= msm_hsusb_pmic_id_notif_init,
+	.phy_id_setup_init	= msm_hsusb_phy_id_setup_init,
+	.vbus_power		= msm_hsusb_vbus_power,
 #endif
-#ifdef CONFIG_USB_EHCI_MSM_72K
-	.vbus_power = msm_hsusb_vbus_power,
+	.ldo_init		= msm_hsusb_ldo_init,
+	.ldo_enable		= msm_hsusb_ldo_enable,
+	.config_vddcx           = msm_hsusb_config_vddcx,
+	.init_vddcx             = msm_hsusb_init_vddcx,
+#ifdef CONFIG_BATTERY_MSM8X60
+	.chg_vbus_draw		= msm_charger_vbus_draw,
 #endif
-	.ldo_init		 = msm_hsusb_ldo_init,
-	.ldo_enable		 = msm_hsusb_ldo_enable,
-	.config_vddcx            = msm_hsusb_config_vddcx,
-	.init_vddcx              = msm_hsusb_init_vddcx,
 };
 #endif
 
@@ -1646,20 +1648,20 @@ static struct adc_access_fn xoadc_fn = {
 };
 
 static struct msm_adc_channels msm_adc_channels_data[] = {
-	{"vbatt", CHANNEL_ADC_VBATT, 0, &xoadc_fn, CHAN_PATH_TYPE2,
+	{"vbatt", CHANNEL_ADC_VBATT, 0, &xoadc_fn, CHAN_PATH_TYPE_NONE,
 		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE3, scale_default},
-	{"vcoin", CHANNEL_ADC_VCOIN, 0, &xoadc_fn, CHAN_PATH_TYPE1,
+	{"vcoin", CHANNEL_ADC_VCOIN, 0, &xoadc_fn, CHAN_PATH_TYPE_NONE,
 		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE2, scale_default},
-	{"vcharger_channel", CHANNEL_ADC_VCHG, 0, &xoadc_fn, CHAN_PATH_TYPE3,
+	{"vcharger_channel", CHANNEL_ADC_VCHG, 0, &xoadc_fn, CHAN_PATH_TYPE13,
 		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE4, scale_default},
 	{"charger_current_monitor", CHANNEL_ADC_CHG_MONITOR, 0, &xoadc_fn,
-		CHAN_PATH_TYPE4,
+		CHAN_PATH_TYPE_NONE,
 		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE1, scale_default},
-	{"vph_pwr", CHANNEL_ADC_VPH_PWR, 0, &xoadc_fn, CHAN_PATH_TYPE5,
+	{"vph_pwr", CHANNEL_ADC_VPH_PWR, 0, &xoadc_fn, CHAN_PATH_TYPE_NONE,
 		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE3, scale_default},
-	{"usb_vbus", CHANNEL_ADC_USB_VBUS, 0, &xoadc_fn, CHAN_PATH_TYPE11,
+	{"usb_vbus", CHANNEL_ADC_USB_VBUS, 0, &xoadc_fn, CHAN_PATH_TYPE_NONE,
 		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE3, scale_default},
-	{"pmic_therm", CHANNEL_ADC_DIE_TEMP, 0, &xoadc_fn, CHAN_PATH_TYPE12,
+	{"pmic_therm", CHANNEL_ADC_DIE_TEMP, 0, &xoadc_fn, CHAN_PATH_TYPE_NONE,
 		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE1, scale_pmic_therm},
 	{"pmic_therm_4K", CHANNEL_ADC_DIE_TEMP_4K, 0, &xoadc_fn,
 		CHAN_PATH_TYPE12,
@@ -1671,14 +1673,14 @@ static struct msm_adc_channels msm_adc_channels_data[] = {
 		ADC_CONFIG_TYPE1, ADC_CALIB_CONFIG_TYPE6, tdkntcgtherm},
 	{"hdset_detect", CHANNEL_ADC_HDSET, 0, &xoadc_fn, CHAN_PATH_TYPE6,
 		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE1, scale_default},
-	{"chg_batt_amon", CHANNEL_ADC_BATT_AMON, 0, &xoadc_fn, CHAN_PATH_TYPE10,
+	{"chg_batt_amon", CHANNEL_ADC_BATT_AMON, 0, &xoadc_fn, CHAN_PATH_TYPE7,
 		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE1,
-		scale_xtern_chgr_cur},
+		scale_default},
 	{"msm_therm", CHANNEL_ADC_MSM_THERM, 0, &xoadc_fn, CHAN_PATH_TYPE8,
 		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE2, scale_msm_therm},
-	{"batt_therm", CHANNEL_ADC_BATT_THERM, 0, &xoadc_fn, CHAN_PATH_TYPE7,
-		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE2, scale_batt_therm},
-	{"batt_id", CHANNEL_ADC_BATT_ID, 0, &xoadc_fn, CHAN_PATH_TYPE9,
+	{"batt_therm", CHANNEL_ADC_BATT_THERM, 0, &xoadc_fn, CHAN_PATH_TYPE6,
+		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE2, scale_default},
+	{"batt_id", CHANNEL_ADC_BATT_ID, 0, &xoadc_fn, CHAN_PATH_TYPE_NONE,
 		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE2, scale_default},
 	{"ref_625mv", CHANNEL_ADC_625_REF, 0, &xoadc_fn, CHAN_PATH_TYPE15,
 		ADC_CONFIG_TYPE2, ADC_CALIB_CONFIG_TYPE2, scale_default},
@@ -1710,8 +1712,8 @@ static struct htc_headset_gpio_platform_data htc_headset_gpio_data = {
 
 static struct platform_device htc_headset_gpio = {
 	.name   = "HTC_HEADSET_GPIO",
-	.id     = -1,
-	.dev    = {
+	.id	= -1,
+	.dev	= {
 		.platform_data = &htc_headset_gpio_data,
 	},
 };
@@ -1813,6 +1815,104 @@ static void headset_device_register(void)
 	platform_device_register(&htc_headset_mgr);
 };
 
+static uint32_t usb_ID_PIN_input_table[] = {
+	GPIO_CFG(SHOOTER_GPIO_USB_ID, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+};
+
+static uint32_t usb_ID_PIN_ouput_table[] = {
+	GPIO_CFG(SHOOTER_GPIO_USB_ID, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+};
+
+static uint32_t mhl_usb_switch_ouput_table[] = {
+	GPIO_CFG(SHOOTER_GPIO_MHL_USB_SW, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
+};
+
+static struct pm8xxx_mpp_init_info usb_mpp_init_configs[] = {
+	PM8058_MPP_INIT(10, D_INPUT, PM8058_MPP_DIG_LEVEL_S3, DIN_TO_INT),
+	PM8058_MPP_INIT(11, D_BI_DIR, PM8058_MPP_DIG_LEVEL_S3, BI_PULLUP_10KOHM),
+};
+
+static int mpp_init_setup(struct pm8xxx_mpp_init_info *configs, int length)
+{
+	int ret = 0, i;
+
+	for (i = 0; i < length; i++) {
+		ret = pm8xxx_mpp_config(configs[i].mpp,
+				&configs[i].config);
+		if (ret) {
+			pr_err("%s: Config MPP %d of PM8058 failed\n",
+					__func__, configs[i].mpp);
+			return ret;
+		}
+	}
+	return ret;
+}
+
+static void pm8058_usb_config(void)
+{
+	mpp_init_setup(usb_mpp_init_configs, ARRAY_SIZE(usb_mpp_init_configs));
+}
+
+void config_shooter_usb_id_gpios(bool output)
+{
+	if (output) {
+		gpio_tlmm_config(usb_ID_PIN_ouput_table[0], 0);
+		gpio_set_value(SHOOTER_GPIO_USB_ID, 1);
+		printk(KERN_INFO "%s %d output high\n",  __func__, SHOOTER_GPIO_USB_ID);
+	} else {
+		gpio_tlmm_config(usb_ID_PIN_input_table[0], 0);
+		printk(KERN_INFO "%s %d input none pull\n",  __func__, SHOOTER_GPIO_USB_ID);
+	}
+}
+
+static void shooter_usb_dpdn_switch(int path)
+{
+	switch (path) {
+	case PATH_USB:
+	case PATH_MHL:
+	{
+		int polarity = 1; /* high = mhl */
+		int mhl = (path == PATH_MHL);
+
+		gpio_tlmm_config(mhl_usb_switch_ouput_table[0], 0);
+
+		pr_info("[CABLE] %s: Set %s path\n", __func__, mhl ? "MHL" : "USB");
+		gpio_set_value(SHOOTER_GPIO_MHL_USB_SW, (mhl ^ !polarity) ? 1 : 0);
+		break;
+	}
+	}
+
+#ifdef CONFIG_FB_MSM_HDMI_MHL
+	sii9234_change_usb_owner((path == PATH_MHL)?1:0);
+#endif
+}
+
+static struct cable_detect_platform_data cable_detect_pdata = {
+	.vbus_mpp_gpio		= PM8058_MPP_PM_TO_SYS(10),
+	.vbus_mpp_config	= pm8058_usb_config,
+	.vbus_mpp_irq		= PM8058_IRQ_BASE + PM8058_CBLPWR_IRQ,
+	.detect_type		= CABLE_TYPE_PMIC_ADC,
+	.usb_id_pin_gpio	= SHOOTER_GPIO_USB_ID,
+	.usb_dpdn_switch	= shooter_usb_dpdn_switch,
+	.mhl_reset_gpio		= SHOOTER_GPIO_MHL_RESET,
+	.mpp_data = {
+		.usbid_mpp	= PM8058_MPP_PM_TO_SYS(XOADC_MPP_4),
+		.usbid_amux	= PM_MPP_AIN_AMUX_CH5,
+	},
+	.config_usb_id_gpios	= config_shooter_usb_id_gpios,
+#ifdef CONFIG_FB_MSM_HDMI_MHL
+	.mhl_1v2_power		= mhl_sii9234_1v2_power,
+#endif
+};
+
+static struct platform_device cable_detect_device = {
+	.name   = "cable_detect",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &cable_detect_pdata,
+	},
+};
+
 static void pmic8058_xoadc_mpp_config(void)
 {
 	/* Do not set mpp to amux in here.
@@ -1858,6 +1958,13 @@ static int pmic8058_xoadc_vreg_setup(void)
 		goto fail;
 	}
 
+        rc = regulator_enable(vreg_ldo18_adc);
+        if (rc) {
+                pr_err("%s: Enable of regulator ldo18_adc "
+                                        "failed\n", __func__);
+                goto fail;
+        }
+
 	return rc;
 fail:
 	regulator_put(vreg_ldo18_adc);
@@ -1895,13 +2002,13 @@ static struct xoadc_platform_data pm8058_xoadc_pdata = {
 static int pm8058_pwm_config(struct pwm_device *pwm, int ch, int on)
 {
 	struct pm_gpio pwm_gpio_config = {
-		.direction      = PM_GPIO_DIR_OUT,
+		.direction	= PM_GPIO_DIR_OUT,
 		.output_buffer  = PM_GPIO_OUT_BUF_CMOS,
 		.output_value   = 0,
-		.pull           = PM_GPIO_PULL_NO,
-		.vin_sel        = PM8058_GPIO_VIN_VPH,
+		.pull		= PM_GPIO_PULL_NO,
+		.vin_sel	= PM8058_GPIO_VIN_VPH,
 		.out_strength   = PM_GPIO_STRENGTH_HIGH,
-		.function       = PM_GPIO_FUNC_2,
+		.function	= PM_GPIO_FUNC_2,
 	};
 
 	int rc = -EINVAL;
@@ -1981,8 +2088,8 @@ static int pm8058_gpios_init(void)
 	int i;
 	int rc;
 	struct pm8058_gpio_cfg {
-		int                gpio;
-		struct pm_gpio	   cfg;
+		int		gpio;
+		struct pm_gpio	cfg;
 	};
 
 	struct pm8058_gpio_cfg gpio_cfgs[] = {
@@ -1990,11 +2097,11 @@ static int pm8058_gpios_init(void)
 		{
 			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SDC3_DET - 1),
 			{
-				.direction      = PM_GPIO_DIR_IN,
-				.pull           = PM_GPIO_PULL_UP_30,
-				.vin_sel        = 2,
-				.function       = PM_GPIO_FUNC_NORMAL,
-				.inv_int_pol    = 0,
+				.direction	= PM_GPIO_DIR_IN,
+				.pull		= PM_GPIO_PULL_UP_30,
+				.vin_sel	= 2,
+				.function	= PM_GPIO_FUNC_NORMAL,
+				.inv_int_pol	= 0,
 			},
 		},
 #endif
@@ -2154,11 +2261,11 @@ static int pm8058_gpios_init(void)
 		{
 			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_REMO_PRES),
 			{
-				.direction      = PM_GPIO_DIR_IN,
-				.pull           = PM_GPIO_PULL_UP_1P5,
-				.vin_sel        = PM8058_GPIO_VIN_L5, /* 2.85 V */
-				.function       = PM_GPIO_FUNC_NORMAL,
-				.inv_int_pol    = 0,
+				.direction	= PM_GPIO_DIR_IN,
+				.pull		= PM_GPIO_PULL_UP_1P5,
+				.vin_sel	= PM8058_GPIO_VIN_L5, /* 2.85 V */
+				.function	= PM_GPIO_FUNC_NORMAL,
+				.inv_int_pol	= 0,
 			},
 		},
 	};
@@ -2331,7 +2438,7 @@ static void __init msm8x60_init_pm8058_othc(void)
 #endif
 
 static struct pm8xxx_rtc_platform_data pm8058_rtc_pdata = {
-	.rtc_write_enable       = false,
+	.rtc_write_enable       = true,
 	.rtc_alarm_powerup	= false,
 };
 
@@ -2849,6 +2956,7 @@ static struct platform_device *devices[] __initdata = {
 #endif
 	&msm_tsens_device,
 	&msm_rpm_device,
+	&cable_detect_device,
 #ifdef CONFIG_ION_MSM
 	&ion_dev,
 #endif
@@ -3181,7 +3289,6 @@ static struct msm_i2c_platform_data msm_gsbi10_qup_i2c_pdata = {
 	.src_clk_rate = 24000000,
 	.msm_i2c_config_gpio = gsbi_qup_i2c_gpio_config,
 };
-
 #endif
 
 #if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)
@@ -4025,6 +4132,17 @@ static struct attribute_group shooter_properties_attr_group = {
 static void __init msm8x60_init_buses(void)
 {
 #ifdef CONFIG_I2C_QUP
+	void *gsbi_mem = ioremap_nocache(0x19C00000, 4);
+	if (!gsbi_mem){
+		pr_err("%s(): Error getting memory\n", __func__);
+		BUG_ON(1);
+	}
+	/* Setting protocol code to 0x60 for dual UART/I2C in GSBI12 */
+	writel_relaxed(0x6 << 4, gsbi_mem);
+	/* Ensure protocol code is written before proceeding further */
+	mb();
+	iounmap(gsbi_mem);
+
 	msm_gsbi4_qup_i2c_device.dev.platform_data = &msm_gsbi4_qup_i2c_pdata;
 	msm_gsbi5_qup_i2c_device.dev.platform_data = &msm_gsbi5_qup_i2c_pdata;
 	msm_gsbi7_qup_i2c_device.dev.platform_data = &msm_gsbi7_qup_i2c_pdata;
@@ -4037,9 +4155,6 @@ static void __init msm8x60_init_buses(void)
 #else
 	msm_gsbi3_qup_spi_device.dev.platform_data = &msm_gsbi3_qup_spi_pdata;
 #endif
-#endif
-#ifdef CONFIG_I2C_SSBI
-	msm_device_ssbi3.dev.platform_data = &msm_ssbi3_pdata;
 #endif
 #ifdef CONFIG_MSM_SSBI
 	msm_device_ssbi_pmic1.dev.platform_data =
@@ -4175,6 +4290,10 @@ static void __init msm8x60_init(void)
 	BUG_ON(msm_pm_boot_init(&msm_pm_boot_pdata));
 
 	pm8058_gpios_init();
+
+#ifdef CONFIG_SENSORS_MSM_ADC
+	msm_adc_pdata.target_hw = MSM_8x60;
+#endif
 
 	shooter_init_keypad();
 	shooter_wifi_init();

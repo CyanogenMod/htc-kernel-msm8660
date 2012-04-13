@@ -676,6 +676,10 @@ config CABLE_DETECT_8X60
 	help
 	  Detect usb, ac and other accessories.
 
+config CABLE_DETECT_ACCESSORY
+	boolean "CABLE ACCESSORY DETECT"
+	default n
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
