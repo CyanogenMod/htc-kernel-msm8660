@@ -187,7 +187,9 @@ void mdp4_overlay_dmae_cfg(struct msm_fb_data_type *mfd, int atv)
 		MDP_OUTP(MDP_BASE + 0xb3014, 0x1000080);
 		MDP_OUTP(MDP_BASE + 0xb4004, 0x67686970);
 	} else {
+#ifdef CONFIG_FB_MSM_DTV
 		mdp_vid_quant_set();
+#endif
 		MDP_OUTP(MDP_BASE + 0xb0070, 0xff0000);
 		MDP_OUTP(MDP_BASE + 0xb0074, 0xff0000);
 		MDP_OUTP(MDP_BASE + 0xb0078, 0xff0000);
@@ -2195,10 +2197,14 @@ static void mdp4_overlay1_update_blt_mode(struct msm_fb_data_type *mfd)
 		return;
 	if (mfd->use_ov1_blt) {
 		mdp4_allocate_writeback_buf(mfd, MDP4_MIXER1);
+#ifdef CONFIG_FB_MSM_DTV
 		mdp4_dtv_overlay_blt_start(mfd);
+#endif
 		pr_debug("%s overlay1 writeback is enabled\n", __func__);
 	} else {
+#ifdef CONFIG_FB_MSM_DTV
 		mdp4_dtv_overlay_blt_stop(mfd);
+#endif
 		pr_debug("%s overlay1 writeback is disabled\n", __func__);
 	}
 	mfd->ov1_blt_state = mfd->use_ov1_blt;
