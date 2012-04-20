@@ -711,6 +711,7 @@ static struct branch_clk vpe_axi_clk = {
 	},
 };
 
+#ifndef CONFIG_HTC_DEVICE
 static struct branch_clk smi_2x_axi_clk = {
 	.b = {
 		.ctl_reg = MAXI_EN2_REG,
@@ -725,6 +726,7 @@ static struct branch_clk smi_2x_axi_clk = {
 		CLK_INIT(smi_2x_axi_clk.c),
 	},
 };
+#endif
 
 /* AHB Interfaces */
 static struct branch_clk amp_p_clk = {
@@ -3200,7 +3202,11 @@ DEFINE_CLK_RPM(mmfab_clk, mmfab_a_clk, MM_FABRIC, NULL);
 DEFINE_CLK_RPM(mmfpb_clk, mmfpb_a_clk, MMFPB, NULL);
 DEFINE_CLK_RPM(sfab_clk, sfab_a_clk, SYSTEM_FABRIC, NULL);
 DEFINE_CLK_RPM(sfpb_clk, sfpb_a_clk, SFPB, NULL);
+#ifndef CONFIG_HTC_DEVICE
 DEFINE_CLK_RPM(smi_clk, smi_a_clk, SMI, &smi_2x_axi_clk.c);
+#else
+DEFINE_CLK_RPM(smi_clk, smi_a_clk, SMI, NULL);
+#endif
 
 static DEFINE_CLK_VOTER(dfab_dsps_clk, &dfab_clk.c);
 static DEFINE_CLK_VOTER(dfab_usb_hs_clk, &dfab_clk.c);
@@ -3375,7 +3381,9 @@ static struct measure_sel measure_mux[] = {
 	{ TEST_MM_HS(0x1C), &vpe_clk.c },
 	{ TEST_MM_HS(0x1E), &hdmi_tv_clk.c },
 	{ TEST_MM_HS(0x1F), &mdp_tv_clk.c },
+#ifndef CONFIG_HTC_DEVICE
 	{ TEST_MM_HS(0x24), &smi_2x_axi_clk.c },
+#endif
 
 	{ TEST_MM_HS2X(0x24), &smi_clk.c },
 	{ TEST_MM_HS2X(0x24), &smi_a_clk.c },
@@ -3587,8 +3595,13 @@ static struct clk_lookup msm_clocks_8x60[] = {
 	CLK_LOOKUP("bus_a_clk",		cfpb_a_clk.c,	"msm_cpss_fpb"),
 	CLK_LOOKUP("mem_clk",		ebi1_msmbus_clk.c, "msm_bus"),
 	CLK_LOOKUP("mem_a_clk",		ebi1_a_clk.c,	"msm_bus"),
+#ifndef CONFIG_HTC_DEVICE
 	CLK_LOOKUP("smi_clk",		smi_clk.c,	"msm_bus"),
 	CLK_LOOKUP("smi_a_clk",		smi_a_clk.c,	"msm_bus"),
+#else
+	CLK_LOOKUP("smi_clk",		smi_clk.c,	NULL),
+	CLK_LOOKUP("smi_a_clk",		smi_a_clk.c,	NULL),
+#endif
 
 	CLK_LOOKUP("ebi1_clk",		ebi1_clk.c,	NULL),
 	CLK_LOOKUP("dfab_clk",		dfab_clk.c,	NULL),
