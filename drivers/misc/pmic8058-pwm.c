@@ -585,10 +585,12 @@ struct pwm_device *pwm_request(int pwm_id, const char *label)
 	if (!pwm->in_use) {
 		pwm->in_use = 1;
 		pwm->label = label;
+#ifndef CONFIG_HTC_DEVICE /* Do not to enable LED when request PWM */
 		pwm->use_lut = 0;
 
 		if (pwm_chip->pdata && pwm_chip->pdata->config)
 			pwm_chip->pdata->config(pwm, pwm_id, 1);
+#endif
 	} else
 		pwm = ERR_PTR(-EBUSY);
 	mutex_unlock(&pwm_chip->pwm_mutex);

@@ -462,6 +462,13 @@ config LEDS_TRIGGERS
 	  These triggers allow kernel events to drive the LEDs and can
 	  be configured via sysfs. If unsure, say Y.
 
+config LEDS_PM8058
+	tristate "LED Support for PM8058"
+	depends on PMIC8058_PWM
+	help
+	  This option enables support for LEDs connected to PM8058
+	  LED driver chips accessed via the SSBI bus and rpc.
+
 comment "LED Triggers"
 
 config LEDS_TRIGGER_TIMER

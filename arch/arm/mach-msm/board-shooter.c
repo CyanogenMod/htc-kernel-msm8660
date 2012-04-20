@@ -14,6 +14,7 @@
 #include <linux/i2c.h>
 #include <linux/isl29028.h>
 #include <linux/isl29029.h>
+#include <linux/leds-pm8058.h>
 #include <linux/mpu.h>
 #include <linux/msm_adc.h>
 #include <linux/msm-charger.h>
@@ -2082,6 +2083,62 @@ static struct pmic8058_leds_platform_data pm8058_flash_leds_data = {
 	.leds	= pmic8058_flash_leds,
 };
 
+static struct pm8058_led_config pm_led_config[] = {
+	{
+		.name = "green",
+		.type = PM8058_LED_RGB,
+		.bank = 0,
+		.pwm_size = 9,
+		.clk = PM_PWM_CLK_32KHZ,
+		.pre_div = PM_PWM_PREDIVIDE_2,
+		.pre_div_exp = 1,
+		.pwm_value = 511,
+	},
+	{
+		.name = "amber",
+		.type = PM8058_LED_RGB,
+		.bank = 1,
+		.pwm_size = 9,
+		.clk = PM_PWM_CLK_32KHZ,
+		.pre_div = PM_PWM_PREDIVIDE_2,
+		.pre_div_exp = 1,
+		.pwm_value = 511,
+	},
+	{
+		.name = "button-backlight",
+		.type = PM8058_LED_DRVX,
+		.bank = 6,
+		.flags = PM8058_LED_LTU_EN,
+		.period_us = USEC_PER_SEC / 1000,
+		.start_index = 0,
+		.duites_size = 8,
+		.duty_time_ms = 32,
+		.lut_flag = PM_PWM_LUT_RAMP_UP | PM_PWM_LUT_PAUSE_HI_EN,
+		.out_current = 10,
+	},
+};
+
+static struct pm8058_led_platform_data pm8058_leds_data = {
+	.led_config = pm_led_config,
+	.num_leds = ARRAY_SIZE(pm_led_config),
+	.duties = {0, 15, 30, 45, 60, 75, 90, 100,
+		   100, 90, 75, 60, 45, 30, 15, 0,
+		   0, 0, 0, 0, 0, 0, 0, 0,
+		   0, 0, 0, 0, 0, 0, 0, 0,
+		   0, 0, 0, 0, 0, 0, 0, 0,
+		   0, 0, 0, 0, 0, 0, 0, 0,
+		   0, 0, 0, 0, 0, 0, 0, 0,
+		   0, 0, 0, 0, 0, 0, 0, 0},
+};
+
+static struct platform_device pm8058_leds = {
+	.name	= "leds-pm8058",
+	.id	= -1,
+	.dev	= {
+		.platform_data  = &pm8058_leds_data,
+	},
+};
+
 #define PMIC_GPIO_SDC3_DET 34
 static int pm8058_gpios_init(void)
 {
@@ -2950,6 +3007,7 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_HTC_BATT8x60
 	&htc_battery_pdev,
 #endif
+	&pm8058_leds,
 	&rpm_regulator_device,
 #ifdef CONFIG_HW_RANDOM_MSM
 	&msm_device_rng,
