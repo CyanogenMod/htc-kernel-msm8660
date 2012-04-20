@@ -768,7 +768,7 @@ static ssize_t vbus_status_show(struct device *dev,
 	struct cable_detect_info *pInfo = &the_cable_info;
 	int level, vbus_in;
 
-	level = gpio_get_value(pInfo->vbus_mpp_gpio);
+	level = gpio_get_value_cansleep(pInfo->vbus_mpp_gpio);
 	vbus_in = (level) ? 0:1;
 	CABLE_INFO("%s: vbus state = %d\n", __func__, vbus_in);
 	return sprintf(buf, "%d\n", vbus_in);

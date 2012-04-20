@@ -53,7 +53,7 @@ void hs_gpio_key_enable(int enable)
 	HS_DBG();
 
 	if (hi->pdata.key_enable_gpio)
-		gpio_set_value(hi->pdata.key_enable_gpio, enable);
+		gpio_set_value_cansleep(hi->pdata.key_enable_gpio, enable);
 }
 
 void hs_gpio_mic_select(int enable)
@@ -61,7 +61,7 @@ void hs_gpio_mic_select(int enable)
 	HS_DBG();
 
 	if (hi->pdata.mic_select_gpio)
-		gpio_set_value(hi->pdata.mic_select_gpio, enable);
+		gpio_set_value_cansleep(hi->pdata.mic_select_gpio, enable);
 }
 
 static void detect_gpio_work_func(struct work_struct *work)
@@ -70,7 +70,7 @@ static void detect_gpio_work_func(struct work_struct *work)
 
 	HS_DBG();
 
-	insert = gpio_get_value(hi->pdata.hpin_gpio) ? 0 : 1;
+	insert = gpio_get_value_cansleep(hi->pdata.hpin_gpio) ? 0 : 1;
 
 	if (hi->headset_state == insert)
 		return;
@@ -91,10 +91,10 @@ static irqreturn_t detect_irq_handler(int irq, void *dev_id)
 	HS_DBG();
 
 	do {
-		gpio1 = gpio_get_value(hi->pdata.hpin_gpio);
+		gpio1 = gpio_get_value_cansleep(hi->pdata.hpin_gpio);
 		irq_type = gpio1 ? IRQF_TRIGGER_LOW : IRQF_TRIGGER_HIGH;
 		set_irq_type(hi->hpin_irq, irq_type);
-		gpio2 = gpio_get_value(hi->pdata.hpin_gpio);
+		gpio2 = gpio_get_value_cansleep(hi->pdata.hpin_gpio);
 	} while (gpio1 != gpio2 && retry_limit-- > 0);
 
 	HS_DBG("gpio2 = %d (%d retries)", gpio2, (10-retry_limit));

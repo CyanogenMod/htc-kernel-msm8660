@@ -77,7 +77,7 @@ static int hs_pmic_hpin_state(void)
 {
 	HS_DBG();
 
-	return gpio_get_value(hi->pdata.hpin_gpio);
+	return gpio_get_value_cansleep(hi->pdata.hpin_gpio);
 }
 
 #ifdef HTC_HEADSET_CONFIG_MSM_RPC
@@ -250,7 +250,7 @@ static void hs_pmic_key_enable(int enable)
 	HS_DBG();
 
 	if (hi->pdata.key_enable_gpio)
-		gpio_set_value(hi->pdata.key_enable_gpio, enable);
+		gpio_set_value_cansleep(hi->pdata.key_enable_gpio, enable);
 }
 
 static void detect_pmic_work_func(struct work_struct *work)
@@ -259,7 +259,7 @@ static void detect_pmic_work_func(struct work_struct *work)
 
 	HS_DBG();
 
-	insert = gpio_get_value(hi->pdata.hpin_gpio) ? 0 : 1;
+	insert = gpio_get_value_cansleep(hi->pdata.hpin_gpio) ? 0 : 1;
 	hs_notify_plug_event(insert);
 }
 
