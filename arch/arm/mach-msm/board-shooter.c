@@ -25,6 +25,7 @@
 
 #ifdef CONFIG_USB_G_ANDROID
 #include <linux/usb/android.h>
+#include <linux/usb/msm_hsusb.h>
 #include <mach/usbdiag.h>
 #endif
 
@@ -49,7 +50,6 @@
 #include <mach/mpp.h>
 #include <mach/msm_bus_board.h>
 #include <mach/msm_dsps.h>
-#include <mach/msm_hsusb.h>
 #include <mach/msm_iomap.h>
 #include <mach/msm_memtypes.h>
 #include <mach/msm_serial_hs.h>
@@ -434,321 +434,7 @@ static struct msm_cpuidle_state msm_cstates[] __initdata = {
 		MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE},
 };
 
-#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM_72K)
-static struct msm_otg_platform_data msm_otg_pdata;
-static struct regulator *ldo6_3p3;
-static struct regulator *ldo7_1p8;
-static struct regulator *vdd_cx;
-#define PMICID_INT		PM8058_GPIO_IRQ(PM8058_IRQ_BASE, 36)
-#define PMIC_ID_GPIO		36
-notify_vbus_state notify_vbus_state_func_ptr;
-static int usb_phy_susp_dig_vol = 750000;
-static int pmic_id_notif_supported;
-
-#ifdef CONFIG_USB_EHCI_MSM_72K
-#define USB_PMIC_ID_DET_DELAY	msecs_to_jiffies(100)
-struct delayed_work pmic_id_det;
-
-static int __init usb_id_pin_rework_setup(char *support)
-{
-	if (strncmp(support, "true", 4) == 0)
-		pmic_id_notif_supported = 1;
-
-	return 1;
-}
-__setup("usb_id_pin_rework=", usb_id_pin_rework_setup);
-
-static void pmic_id_detect(struct work_struct *w)
-{
-	int val = gpio_get_value_cansleep(PM8058_GPIO_PM_TO_SYS(36));
-	pr_debug("%s(): gpio_read_value = %d\n", __func__, val);
-
-	if (notify_vbus_state_func_ptr)
-		(*notify_vbus_state_func_ptr) (val);
-}
-
-static irqreturn_t pmic_id_on_irq(int irq, void *data)
-{
-	/*
-	 * Spurious interrupts are observed on pmic gpio line
-	 * even though there is no state change on USB ID. Schedule the
-	 * work to to allow debounce on gpio
-	 */
-	schedule_delayed_work(&pmic_id_det, USB_PMIC_ID_DET_DELAY);
-
-	return IRQ_HANDLED;
-}
-
-static int msm_hsusb_phy_id_setup_init(int init)
-{
-	unsigned ret;
-
-	struct pm8xxx_mpp_config_data hsusb_phy_mpp = {
-		.type	= PM8XXX_MPP_TYPE_D_OUTPUT,
-		.level	= PM8901_MPP_DIG_LEVEL_L5,
-	};
-
-	if (init) {
-		hsusb_phy_mpp.control = PM8XXX_MPP_DOUT_CTRL_HIGH;
-		ret = pm8xxx_mpp_config(PM8901_MPP_PM_TO_SYS(1),
-							&hsusb_phy_mpp);
-		if (ret < 0)
-			pr_err("%s:MPP2 configuration failed\n", __func__);
-	} else {
-		hsusb_phy_mpp.control = PM8XXX_MPP_DOUT_CTRL_LOW;
-		ret = pm8xxx_mpp_config(PM8901_MPP_PM_TO_SYS(1),
-							&hsusb_phy_mpp);
-		if (ret < 0)
-			pr_err("%s:MPP2 un config failed\n", __func__);
-	}
-	return ret;
-}
-
-static int msm_hsusb_pmic_id_notif_init(void (*callback)(int online), int init)
-{
-	unsigned ret = -ENODEV;
-
-	struct pm_gpio pmic_id_cfg = {
-		.direction	= PM_GPIO_DIR_IN,
-		.pull		= PM_GPIO_PULL_UP_1P5,
-		.function	= PM_GPIO_FUNC_NORMAL,
-		.vin_sel	= 2,
-		.inv_int_pol	= 0,
-	};
-	struct pm_gpio pmic_id_uncfg = {
-		.direction	= PM_GPIO_DIR_IN,
-		.pull		= PM_GPIO_PULL_NO,
-		.function	= PM_GPIO_FUNC_NORMAL,
-		.vin_sel	= 2,
-		.inv_int_pol	= 0,
-	};
-	if (!callback)
-		return -EINVAL;
-
-	if (SOCINFO_VERSION_MAJOR(socinfo_get_version()) != 2) {
-		pr_debug("%s: USB_ID pin is not routed to PMIC"
-					"on V1 surf/ffa\n", __func__);
-		return -ENOTSUPP;
-	}
-
-	usb_phy_susp_dig_vol = 500000;
-
-	if (init) {
-		notify_vbus_state_func_ptr = callback;
-		INIT_DELAYED_WORK(&pmic_id_det, pmic_id_detect);
-		ret = pm8xxx_gpio_config(PM8058_GPIO_PM_TO_SYS(PMIC_ID_GPIO),
-							&pmic_id_cfg);
-		if (ret) {
-			pr_err("%s:return val of pm8xxx_gpio_config: %d\n",
-						__func__,  ret);
-			return ret;
-		}
-		ret = request_threaded_irq(PMICID_INT, NULL, pmic_id_on_irq,
-			(IRQF_TRIGGER_RISING|IRQF_TRIGGER_FALLING),
-						"msm_otg_id", NULL);
-		if (ret) {
-			pr_err("%s:pmic_usb_id interrupt registration failed",
-					__func__);
-			return ret;
-		}
-		msm_otg_pdata.pmic_id_irq = PMICID_INT;
-	} else {
-		usb_phy_susp_dig_vol = 750000;
-		free_irq(PMICID_INT, 0);
-		ret = pm8xxx_gpio_config(PM8058_GPIO_PM_TO_SYS(PMIC_ID_GPIO),
-							&pmic_id_uncfg);
-		if (ret) {
-			pr_err("%s: return val of pm8xxx_gpio_config: %d\n",
-						__func__,  ret);
-			return ret;
-		}
-		msm_otg_pdata.pmic_id_irq = 0;
-		cancel_delayed_work_sync(&pmic_id_det);
-		notify_vbus_state_func_ptr = NULL;
-	}
-	return 0;
-}
-#endif
-
-#define USB_PHY_OPERATIONAL_MIN_VDD_DIG_VOL	1000000
-#define USB_PHY_MAX_VDD_DIG_VOL			1320000
-static int msm_hsusb_init_vddcx(int init)
-{
-	int ret = 0;
-
-	if (init) {
-		vdd_cx = regulator_get(NULL, "8058_s1");
-		if (IS_ERR(vdd_cx)) {
-			return PTR_ERR(vdd_cx);
-		}
-
-		ret = regulator_set_voltage(vdd_cx,
-				USB_PHY_OPERATIONAL_MIN_VDD_DIG_VOL,
-				USB_PHY_MAX_VDD_DIG_VOL);
-		if (ret) {
-			pr_err("%s: unable to set the voltage for regulator"
-				"vdd_cx\n", __func__);
-			regulator_put(vdd_cx);
-			return ret;
-		}
-
-		ret = regulator_enable(vdd_cx);
-		if (ret) {
-			pr_err("%s: unable to enable regulator"
-				"vdd_cx\n", __func__);
-			regulator_put(vdd_cx);
-		}
-	} else {
-		ret = regulator_disable(vdd_cx);
-		if (ret) {
-			pr_err("%s: Unable to disable the regulator:"
-				"vdd_cx\n", __func__);
-			return ret;
-		}
-
-		regulator_put(vdd_cx);
-	}
-
-	return ret;
-}
-
-static int msm_hsusb_config_vddcx(int high)
-{
-	int max_vol = USB_PHY_MAX_VDD_DIG_VOL;
-	int min_vol;
-	int ret;
-
-	if (high)
-		min_vol = USB_PHY_OPERATIONAL_MIN_VDD_DIG_VOL;
-	else
-		min_vol = usb_phy_susp_dig_vol;
-
-	ret = regulator_set_voltage(vdd_cx, min_vol, max_vol);
-	if (ret) {
-		pr_err("%s: unable to set the voltage for regulator"
-			"vdd_cx\n", __func__);
-		return ret;
-	}
-
-	pr_debug("%s: min_vol:%d max_vol:%d\n", __func__, min_vol, max_vol);
-
-	return ret;
-}
-
-#define USB_PHY_3P3_VOL_MIN	3050000 /* uV */
-#define USB_PHY_3P3_VOL_MAX	3050000 /* uV */
-#define USB_PHY_3P3_HPM_LOAD	50000	/* uA */
-#define USB_PHY_3P3_LPM_LOAD	4000	/* uA */
-
-#define USB_PHY_1P8_VOL_MIN	1800000 /* uV */
-#define USB_PHY_1P8_VOL_MAX	1800000 /* uV */
-#define USB_PHY_1P8_HPM_LOAD	50000	/* uA */
-#define USB_PHY_1P8_LPM_LOAD	4000	/* uA */
-static int msm_hsusb_ldo_init(int init)
-{
-	int rc = 0;
-
-	if (init) {
-		ldo6_3p3 = regulator_get(NULL, "8058_l6");
-		if (IS_ERR(ldo6_3p3))
-			return PTR_ERR(ldo6_3p3);
-
-		ldo7_1p8 = regulator_get(NULL, "8058_l7");
-		if (IS_ERR(ldo7_1p8)) {
-			rc = PTR_ERR(ldo7_1p8);
-			goto put_3p3;
-		}
-
-		rc = regulator_set_voltage(ldo6_3p3, USB_PHY_3P3_VOL_MIN,
-				USB_PHY_3P3_VOL_MAX);
-		if (rc) {
-			pr_err("%s: Unable to set voltage level for"
-				"ldo6_3p3 regulator\n", __func__);
-			goto put_1p8;
-		}
-		rc = regulator_enable(ldo6_3p3);
-		if (rc) {
-			pr_err("%s: Unable to enable the regulator:"
-				"ldo6_3p3\n", __func__);
-			goto put_1p8;
-		}
-		rc = regulator_set_voltage(ldo7_1p8, USB_PHY_1P8_VOL_MIN,
-				USB_PHY_1P8_VOL_MAX);
-		if (rc) {
-			pr_err("%s: Unable to set voltage level for"
-				"ldo7_1p8 regulator\n", __func__);
-			goto disable_3p3;
-		}
-		rc = regulator_enable(ldo7_1p8);
-		if (rc) {
-			pr_err("%s: Unable to enable the regulator:"
-				"ldo7_1p8\n", __func__);
-			goto disable_3p3;
-		}
-
-		return 0;
-	}
-
-	regulator_disable(ldo7_1p8);
-disable_3p3:
-	regulator_disable(ldo6_3p3);
-put_1p8:
-	regulator_put(ldo7_1p8);
-put_3p3:
-	regulator_put(ldo6_3p3);
-	return rc;
-}
-
-static int msm_hsusb_ldo_enable(int on)
-{
-	int ret = 0;
-
-	if (!ldo7_1p8 || IS_ERR(ldo7_1p8)) {
-		pr_err("%s: ldo7_1p8 is not initialized\n", __func__);
-		return -ENODEV;
-	}
-
-	if (!ldo6_3p3 || IS_ERR(ldo6_3p3)) {
-		pr_err("%s: ldo6_3p3 is not initialized\n", __func__);
-		return -ENODEV;
-	}
-
-	if (on) {
-		ret = regulator_set_optimum_mode(ldo7_1p8,
-				USB_PHY_1P8_HPM_LOAD);
-		if (ret < 0) {
-			pr_err("%s: Unable to set HPM of the regulator:"
-				"ldo7_1p8\n", __func__);
-			return ret;
-		}
-		ret = regulator_set_optimum_mode(ldo6_3p3,
-				USB_PHY_3P3_HPM_LOAD);
-		if (ret < 0) {
-			pr_err("%s: Unable to set HPM of the regulator:"
-				"ldo6_3p3\n", __func__);
-			regulator_set_optimum_mode(ldo7_1p8,
-				USB_PHY_1P8_LPM_LOAD);
-			return ret;
-		}
-	} else {
-		ret = regulator_set_optimum_mode(ldo7_1p8,
-				USB_PHY_1P8_LPM_LOAD);
-		if (ret < 0)
-			pr_err("%s: Unable to set LPM of the regulator:"
-				"ldo7_1p8\n", __func__);
-		ret = regulator_set_optimum_mode(ldo6_3p3,
-				USB_PHY_3P3_LPM_LOAD);
-		if (ret < 0)
-			pr_err("%s: Unable to set LPM of the regulator:"
-				"ldo6_3p3\n", __func__);
-	}
-
-	pr_debug("reg (%s)\n", on ? "HPM" : "LPM");
-	return ret < 0 ? ret : 0;
- }
-#endif
-#ifdef CONFIG_USB_EHCI_MSM_72K
-static void msm_hsusb_vbus_power(unsigned phy_info, int on)
+static void msm_hsusb_vbus_power(bool on)
 {
 	static struct regulator *votg_5v_switch;
 	static struct regulator *ext_5v_reg;
@@ -795,42 +481,19 @@ static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 	vbus_is_on = on;
 }
 
-static struct msm_usb_host_platform_data msm_usb_host_pdata = {
-	.phy_info	= (USB_PHY_INTEGRATED | USB_PHY_MODEL_45NM),
-	.power_budget	= 390,
-};
-#endif
-
-#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM_72K)
+static int phy_init_seq[] = { 0x06, 0x36, 0x0C, 0x31, 0x31, 0x32, 0x1, 0x0E, 0x1, 0x11, -1 };
 static struct msm_otg_platform_data msm_otg_pdata = {
-	/* if usb link is in sps there is no need for
-	 * usb pclk as dayatona fabric clock will be
-	 * used instead
-	 */
-	.pemp_level		= PRE_EMPHASIS_WITH_20_PERCENT,
-	.cdr_autoreset		= CDR_AUTO_RESET_DISABLE,
-	.se1_gating		= SE1_GATING_DISABLE,
-	.bam_disable		= 1,
-#ifdef CONFIG_USB_EHCI_MSM_72K
-	.pmic_id_notif_init	= msm_hsusb_pmic_id_notif_init,
-	.phy_id_setup_init	= msm_hsusb_phy_id_setup_init,
-	.vbus_power		= msm_hsusb_vbus_power,
-#endif
-	.ldo_init		= msm_hsusb_ldo_init,
-	.ldo_enable		= msm_hsusb_ldo_enable,
-	.config_vddcx           = msm_hsusb_config_vddcx,
-	.init_vddcx             = msm_hsusb_init_vddcx,
-#ifdef CONFIG_BATTERY_MSM8X60
-	.chg_vbus_draw		= msm_charger_vbus_draw,
-#endif
+	.phy_init_seq 	= phy_init_seq,
+	.vbus_power	= msm_hsusb_vbus_power,
+	.power_budget	= 750,
+	.mode		= USB_PERIPHERAL,
+	.otg_control	= OTG_PMIC_CONTROL,
+	.phy_type	= CI_45NM_INTEGRATED_PHY,
+	 /* TODO: find shooter regulators */
+	.ldo_3v3_name	= "8058_l6",
+	.ldo_1v8_name	= "8058_l7",
+	.vddcx_name	= "8058_s1",
 };
-#endif
-
-#ifdef CONFIG_USB_GADGET_MSM_72K
-static struct msm_hsusb_gadget_platform_data msm_gadget_pdata = {
-	.is_phy_status_timer_on = 1,
-};
-#endif
 
 #ifdef CONFIG_USB_G_ANDROID
 
@@ -2965,10 +2628,10 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_I2C_SSBI
 	&msm_device_ssbi3,
 #endif
-#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_HCD)
+#ifdef CONFIG_USB_EHCI_HCD
 	&msm_device_otg,
 #endif
-#ifdef CONFIG_USB_GADGET_MSM_72K
+#ifdef CONFIG_USB_GADGET
 	&msm_device_gadget_peripheral,
 #endif
 #ifdef CONFIG_USB_G_ANDROID
@@ -4223,11 +3886,8 @@ static void __init msm8x60_init_buses(void)
 #ifdef CONFIG_I2C_SSBI
 	msm_device_ssbi3.dev.platform_data = &msm_ssbi3_pdata;
 #endif
-#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_HCD)
+#if defined(CONFIG_USB_EHCI_HCD)
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
-#endif
-#ifdef CONFIG_USB_GADGET_MSM_72K
-	msm_device_gadget_peripheral.dev.platform_data = &msm_gadget_pdata;
 #endif
 #ifdef CONFIG_BT
 	bt_export_bd_address();
@@ -4332,10 +3992,6 @@ static void __init msm8x60_init(void)
 					     msm_num_footswitch_devices);
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
-
-#ifdef CONFIG_USB_EHCI_MSM_72K
-	msm_add_host(0, &msm_usb_host_pdata);
-#endif
 
 	platform_add_devices(asoc_devices, ARRAY_SIZE(asoc_devices));
 
