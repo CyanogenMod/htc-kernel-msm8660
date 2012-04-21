@@ -151,8 +151,6 @@ static void shooter_panel_power(int onoff)
 			pr_err("%s: error setting l12_3v voltage\n", __func__);
 			goto fail;
 		}
-//TODO forced backlight non to be sure its not an issue.revert when working right
-	led_brightness_switch("lcd-backlight", 255);
 		/* LCM Reset */
 		rc = gpio_request(GPIO_LCM_RST_N,
 			"LCM_RST_N");

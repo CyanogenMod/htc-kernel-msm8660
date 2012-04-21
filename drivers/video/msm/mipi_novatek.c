@@ -382,6 +382,9 @@ static int mipi_novatek_lcd_on(struct platform_device *pdev)
 	struct msm_fb_data_type *mfd;
 	struct mipi_panel_info *mipi;
 	struct msm_panel_info *pinfo;
+#ifdef CONFIG_HTC_DEVICE
+	static int init;
+#endif
 
 	mfd = platform_get_drvdata(pdev);
 	if (!mfd)
@@ -395,6 +398,13 @@ static int mipi_novatek_lcd_on(struct platform_device *pdev)
 
 	mipi  = &mfd->panel_info.mipi;
 
+#ifdef CONFIG_HTC_DEVICE
+	/* FIXME: ugly hack to turn on display when boot animation begins */
+	if (init == 0) {
+		init = 1;
+		return 0;
+	}
+#endif
 	if (mipi->mode == DSI_VIDEO_MODE) {
 		mipi_dsi_cmds_tx(mfd, &novatek_tx_buf, novatek_video_on_cmds,
 			ARRAY_SIZE(novatek_video_on_cmds));
