@@ -1217,6 +1217,7 @@ out:
 	return snprintf(buf, PAGE_SIZE, "%s\n", state);
 }
 
+
 #define DESCRIPTOR_ATTR(field, format_string)				\
 static ssize_t								\
 field ## _show(struct device *dev, struct device_attribute *attr,	\
@@ -1274,6 +1275,7 @@ static DEVICE_ATTR(state, S_IRUGO, state_show, NULL);
 static DEVICE_ATTR(remote_wakeup, S_IRUGO | S_IWUSR,
 		remote_wakeup_show, remote_wakeup_store);
 
+
 static struct device_attribute *android_usb_attributes[] = {
 	&dev_attr_idVendor,
 	&dev_attr_idProduct,
@@ -1290,6 +1292,35 @@ static struct device_attribute *android_usb_attributes[] = {
 	&dev_attr_remote_wakeup,
 	NULL
 };
+
+/*-------------------------------------------------------------------------*/
+/* HTC magic function switch */
+
+#ifdef CONFIG_USB_HTC_SWITCH_STUB
+static ssize_t show_usb_function_switch(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+
+static ssize_t store_usb_function_switch(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	return 0;
+}
+
+static DEVICE_ATTR(usb_function_switch, 0644,
+		show_usb_function_switch, store_usb_function_switch);
+
+static struct attribute *android_htc_usb_attributes[] = {
+	&dev_attr_usb_function_switch.attr,
+	NULL,
+};
+
+static const struct attribute_group htc_attr_group = {
+	.attrs = android_htc_usb_attributes,
+};
+#endif
 
 /*-------------------------------------------------------------------------*/
 /* Composite driver */
@@ -1483,10 +1514,18 @@ static void android_destroy_device(struct android_dev *dev)
 
 static int __devinit android_probe(struct platform_device *pdev)
 {
+	int err;
 	struct android_usb_platform_data *pdata = pdev->dev.platform_data;
 	struct android_dev *dev = _android_dev;
 
 	dev->pdata = pdata;
+
+#ifdef CONFIG_USB_HTC_SWITCH_STUB
+	err = sysfs_create_group(&pdev->dev.kobj, &htc_attr_group);
+	if (err) {
+		pr_err("%s: failed to create HTC USB devices\n", __func__);
+	}
+#endif
 
 	return 0;
 }
