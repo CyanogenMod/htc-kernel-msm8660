@@ -220,6 +220,10 @@ struct mmc_card {
 	unsigned int		sd_bus_speed;	/* Bus Speed Mode set for the card */
 
 	struct dentry		*debugfs_root;
+
+	/* HTC extension */
+	unsigned int		removed;
+	struct sdio_func	*sdio_single_irq; /* SDIO function when only one IRQ active */
 };
 
 /*
