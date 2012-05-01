@@ -37,10 +37,10 @@
 #include <linux/leds.h>
 #include <mach/debug_display.h>
 
-#include "../devices.h"
-#include "../board-shooter.h"
-#include "../devices-msm8x60.h"
-#include "../../../../drivers/video/msm/mdp_hw.h"
+#include "devices.h"
+#include "board-shooter.h"
+#include "devices-msm8x60.h"
+#include "../../../drivers/video/msm/mdp_hw.h"
 
 #include <linux/ion.h>
 
