@@ -267,6 +267,8 @@ struct mmc_host {
 	int			claim_cnt;	/* "claim" nesting count */
 
 	struct delayed_work	detect;
+	/* HTC extension */
+	struct delayed_work	remove;
 	struct wake_lock	detect_wake_lock;
 	int                     detect_change;  /* card detect flag */
 
@@ -319,9 +321,6 @@ struct mmc_host {
 	bool perf_enable;
 #endif
 	unsigned long		private[0] ____cacheline_aligned;
-
-	/* HTC extension */
-	struct delayed_work	remove;
 };
 
 extern struct mmc_host *mmc_alloc_host(int extra, struct device *);
