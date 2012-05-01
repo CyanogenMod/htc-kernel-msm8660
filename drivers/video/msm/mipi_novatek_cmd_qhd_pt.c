@@ -48,21 +48,12 @@ static int __init mipi_cmd_novatek_blue_qhd_pt_init(void)
 	pinfo.pdest = DISPLAY_1;
 	pinfo.wait_cycle = 0;
 	pinfo.bpp = 24;
-#ifdef CONFIG_HTC_DEVICE
-	pinfo.lcdc.h_back_porch = 64;
-	pinfo.lcdc.h_front_porch = 96;
-	pinfo.lcdc.h_pulse_width = 32;
-	pinfo.lcdc.v_back_porch = 16;
-	pinfo.lcdc.v_front_porch = 16;
-	pinfo.lcdc.v_pulse_width = 4;
-#else
 	pinfo.lcdc.h_back_porch = 50;
 	pinfo.lcdc.h_front_porch = 50;
 	pinfo.lcdc.h_pulse_width = 20;
 	pinfo.lcdc.v_back_porch = 11;
 	pinfo.lcdc.v_front_porch = 10;
 	pinfo.lcdc.v_pulse_width = 5;
-#endif
 	pinfo.lcdc.border_clr = 0;	/* blk */
 	pinfo.lcdc.underflow_clr = 0xff;	/* blue */
 	pinfo.lcdc.hsync_skew = 0;
@@ -73,14 +64,11 @@ static int __init mipi_cmd_novatek_blue_qhd_pt_init(void)
 	pinfo.is_3d_panel = FB_TYPE_3D_PANEL;
 	pinfo.lcd.vsync_enable = TRUE;
 	pinfo.lcd.hw_vsync_mode = TRUE;
-#ifdef CONFIG_HTC_DEVICE
-pinfo.lcd.refx100 = 6096; /* adjust refx100 to prevent tearing */
-#else
 	pinfo.lcd.refx100 = 6000; /* adjust refx100 to prevent tearing */
 	pinfo.lcd.v_back_porch = 11;
 	pinfo.lcd.v_front_porch = 10;
 	pinfo.lcd.v_pulse_width = 5;
-#endif
+
 	pinfo.mipi.mode = DSI_CMD_MODE;
 	pinfo.mipi.dst_format = DSI_CMD_DST_FORMAT_RGB888;
 	pinfo.mipi.vc = 0;
@@ -88,13 +76,8 @@ pinfo.lcd.refx100 = 6096; /* adjust refx100 to prevent tearing */
 #if defined(NOVATEK_TWO_LANE)
 	pinfo.mipi.data_lane1 = TRUE;
 #endif
-#ifdef CONFIG_HTC_DEVICE
-	pinfo.mipi.t_clk_post = 0x0a;
-	pinfo.mipi.t_clk_pre = 0x1e;
-#else
 	pinfo.mipi.t_clk_post = 0x22;
 	pinfo.mipi.t_clk_pre = 0x3f;
-#endif
 	pinfo.mipi.stream = 0;	/* dma_p */
 	pinfo.mipi.mdp_trigger = DSI_CMD_TRIGGER_NONE;
 	pinfo.mipi.dma_trigger = DSI_CMD_TRIGGER_SW;
