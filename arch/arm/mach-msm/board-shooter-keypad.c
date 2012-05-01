@@ -65,7 +65,11 @@ static int shooter_gpio_keypad_power(
 };
 
 static struct gpio_event_platform_data shooter_keypad_data = {
+#ifdef CONFIG_MACH_SHOOTER
 	.name = "shooter-keypad",
+#else
+	.name = "shooteru-keypad",
+#endif
 	.info = shooter_keypad_info,
 	.info_count = ARRAY_SIZE(shooter_keypad_info),
 	.power = shooter_gpio_keypad_power,
