@@ -99,6 +99,7 @@ struct iris_device {
 	struct hci_fm_ssbi_peek   ssbi_peek_reg;
 	struct hci_fm_sig_threshold_rsp sig_th;
 	struct hci_fm_ch_det_threshold ch_det_threshold;
+	struct hci_fm_data_rd_rsp default_data;
 };
 
 static struct video_device *priv_videodev;
@@ -1769,23 +1770,15 @@ static void hci_cc_riva_read_default_rsp(struct radio_hci_dev *hdev,
 	struct iris_device *radio = video_get_drvdata(video_get_dev());
 	__u8 status = *((__u8 *) skb->data);
 	__u8 len;
-	char *data;
 
 	if (status)
 		return;
 	len = skb->data[1];
-	data = kmalloc(len+2, GFP_ATOMIC);
-	if (!data) {
-		FMDERR("Memory allocation failed");
-		return;
-	}
 
-	data[0] = status;
-	data[1] = len;
-	memcpy(&data[2], &skb->data[DEFAULT_DATA_OFFSET], len);
-	iris_q_evt_data(radio, data, len+2, IRIS_BUF_RD_DEFAULT);
+	memset(&radio->default_data, 0 , sizeof(struct hci_fm_data_rd_rsp));
+	memcpy(&radio->default_data, &skb->data[0], len+2);
+	iris_q_evt_data(radio, &skb->data[0], len+2, IRIS_BUF_RD_DEFAULT);
 	radio_hci_req_complete(hdev, status);
-	kfree(data);
 }
 
 static void hci_cc_ssbi_peek_rsp(struct radio_hci_dev *hdev,
@@ -1879,6 +1872,7 @@ static inline void hci_cmd_complete_event(struct radio_hci_dev *hdev,
 
 	switch (opcode) {
 	case hci_recv_ctrl_cmd_op_pack(HCI_OCF_FM_ENABLE_RECV_REQ):
+	case hci_trans_ctrl_cmd_op_pack(HCI_OCF_FM_ENABLE_TRANS_REQ):
 		hci_cc_fm_enable_rsp(hdev, skb);
 		break;
 	case hci_recv_ctrl_cmd_op_pack(HCI_OCF_FM_GET_RECV_CONF_REQ):
@@ -1886,6 +1880,7 @@ static inline void hci_cmd_complete_event(struct radio_hci_dev *hdev,
 		break;
 
 	case hci_recv_ctrl_cmd_op_pack(HCI_OCF_FM_DISABLE_RECV_REQ):
+	case hci_trans_ctrl_cmd_op_pack(HCI_OCF_FM_DISABLE_TRANS_REQ):
 		hci_cc_fm_disable_rsp(hdev, skb);
 		break;
 
@@ -1900,8 +1895,6 @@ static inline void hci_cmd_complete_event(struct radio_hci_dev *hdev,
 	case hci_recv_ctrl_cmd_op_pack(HCI_OCF_FM_EN_WAN_AVD_CTRL):
 	case hci_recv_ctrl_cmd_op_pack(HCI_OCF_FM_EN_NOTCH_CTRL):
 	case hci_recv_ctrl_cmd_op_pack(HCI_OCF_FM_SET_CH_DET_THRESHOLD):
-	case hci_trans_ctrl_cmd_op_pack(HCI_OCF_FM_ENABLE_TRANS_REQ):
-	case hci_trans_ctrl_cmd_op_pack(HCI_OCF_FM_DISABLE_TRANS_REQ):
 	case hci_trans_ctrl_cmd_op_pack(HCI_OCF_FM_RDS_RT_REQ):
 	case hci_trans_ctrl_cmd_op_pack(HCI_OCF_FM_RDS_PS_REQ):
 	case hci_common_cmd_op_pack(HCI_OCF_FM_DEFAULT_DATA_WRITE):
@@ -2773,6 +2766,8 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 	unsigned long arg = 0;
 	struct hci_fm_tx_ps tx_ps = {0};
 	struct hci_fm_tx_rt tx_rt = {0};
+	struct hci_fm_def_data_rd_req rd_txgain;
+	struct hci_fm_def_data_wr_req wr_txgain;
 
 	switch (ctrl->id) {
 	case V4L2_CID_PRIVATE_IRIS_TX_TONE:
@@ -3055,6 +3050,32 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		radio->ps_repeatcount = ctrl->value;
 		break;
 	case V4L2_CID_TUNE_POWER_LEVEL:
+		if (ctrl->value > FM_TX_PWR_LVL_MAX)
+			ctrl->value = FM_TX_PWR_LVL_MAX;
+		if (ctrl->value < FM_TX_PWR_LVL_0)
+			ctrl->value = FM_TX_PWR_LVL_0;
+		rd_txgain.mode = FM_TX_PHY_CFG_MODE;
+		rd_txgain.length = FM_TX_PHY_CFG_LEN;
+		rd_txgain.param_len = 0x00;
+		rd_txgain.param = 0x00;
+
+		retval = hci_def_data_read(&rd_txgain, radio->fm_hdev);
+		if (retval < 0) {
+			FMDERR("Default data read failed for PHY_CFG %d\n",
+			retval);
+			break;
+		}
+		memset(&wr_txgain, 0, sizeof(wr_txgain));
+		wr_txgain.mode = FM_TX_PHY_CFG_MODE;
+		wr_txgain.length = FM_TX_PHY_CFG_LEN;
+		memcpy(&wr_txgain.data, &radio->default_data.data,
+					radio->default_data.ret_data_len);
+		wr_txgain.data[FM_TX_PWR_GAIN_OFFSET] =
+				(ctrl->value) * FM_TX_PWR_LVL_STEP_SIZE;
+		retval = hci_def_data_write(&wr_txgain, radio->fm_hdev);
+		if (retval < 0)
+			FMDERR("Default write failed for PHY_TXGAIN %d\n",
+			retval);
 		break;
 	case V4L2_CID_PRIVATE_IRIS_SOFT_MUTE:
 		radio->mute_mode.soft_mute = ctrl->value;
@@ -3356,12 +3377,7 @@ static int iris_vidioc_s_hw_freq_seek(struct file *file, void *priv,
 					struct v4l2_hw_freq_seek *seek)
 {
 	struct iris_device *radio = video_get_drvdata(video_devdata(file));
-	int dir;
-	if (seek->seek_upward)
-		dir = SRCH_DIR_UP;
-	else
-		dir = SRCH_DIR_DOWN;
-	return iris_search(radio, CTRL_ON, dir);
+	return iris_search(radio, CTRL_ON, seek->seek_upward);
 }
 
 static int iris_vidioc_querycap(struct file *file, void *priv,

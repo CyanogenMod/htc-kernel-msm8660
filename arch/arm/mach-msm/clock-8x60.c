@@ -3216,6 +3216,7 @@ static DEFINE_CLK_VOTER(dfab_sdc3_clk, &dfab_clk.c);
 static DEFINE_CLK_VOTER(dfab_sdc4_clk, &dfab_clk.c);
 static DEFINE_CLK_VOTER(dfab_sdc5_clk, &dfab_clk.c);
 static DEFINE_CLK_VOTER(dfab_scm_clk, &dfab_clk.c);
+static DEFINE_CLK_VOTER(dfab_qseecom_clk, &dfab_clk.c);
 
 static DEFINE_CLK_VOTER(ebi1_msmbus_clk, &ebi1_clk.c);
 static DEFINE_CLK_VOTER(ebi1_adm0_clk,   &ebi1_clk.c);
@@ -3841,8 +3842,10 @@ static struct clk_lookup msm_clocks_8x60[] = {
 	CLK_LOOKUP("i2s_spkr_bit_clk",	spare_i2s_spkr_bit_clk.c,	NULL),
 	CLK_LOOKUP("pcm_clk",		pcm_clk.c,		NULL),
 	CLK_LOOKUP("core_clk",		jpegd_axi_clk.c,	"msm_iommu.0"),
+	CLK_LOOKUP("core_clk",		vpe_axi_clk.c,		"msm_iommu.1"),
 	CLK_LOOKUP("core_clk",		mdp_axi_clk.c,		"msm_iommu.2"),
 	CLK_LOOKUP("core_clk",		mdp_axi_clk.c,		"msm_iommu.3"),
+	CLK_LOOKUP("core_clk",		rot_axi_clk.c,		"msm_iommu.4"),
 	CLK_LOOKUP("core_clk",		ijpeg_axi_clk.c,	"msm_iommu.5"),
 	CLK_LOOKUP("core_clk",		vfe_axi_clk.c,		"msm_iommu.6"),
 	CLK_LOOKUP("core_clk",		vcodec_axi_clk.c,	"msm_iommu.7"),
@@ -3865,6 +3868,7 @@ static struct clk_lookup msm_clocks_8x60[] = {
 	CLK_LOOKUP("bus_clk",		dfab_sdc4_clk.c, "msm_sdcc.4"),
 	CLK_LOOKUP("bus_clk",		dfab_sdc5_clk.c, "msm_sdcc.5"),
 	CLK_LOOKUP("bus_clk",		dfab_scm_clk.c,	"scm"),
+	CLK_LOOKUP("bus_clk",		dfab_qseecom_clk.c,	"qseecom"),
 
 	CLK_LOOKUP("mem_clk",		ebi1_adm0_clk.c, "msm_dmov.0"),
 	CLK_LOOKUP("mem_clk",		ebi1_adm1_clk.c, "msm_dmov.1"),

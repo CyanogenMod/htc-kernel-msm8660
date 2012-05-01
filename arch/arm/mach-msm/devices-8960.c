@@ -568,6 +568,7 @@ struct msm_vidc_platform_data vidc_platform_data = {
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
 	.memtype = ION_CP_MM_HEAP_ID,
 	.enable_ion = 1,
+	.cp_enabled = 1,
 #else
 	.memtype = MEMTYPE_EBI1,
 	.enable_ion = 0,
@@ -883,6 +884,8 @@ static struct pil_q6v4_pdata msm_8960_q6_mss_fw_data = {
 	.aclk_reg = SFAB_MSS_Q6_FW_ACLK_CTL,
 	.jtag_clk_reg = MSS_Q6FW_JTAG_CLK_CTL,
 	.xo_id = MSM_XO_CXO,
+	.xo1_id = MSM_XO_TCXO_A0,
+	.xo2_id = MSM_XO_TCXO_A1,
 	.name = "modem_fw",
 	.depends = "q6",
 	.pas_id = PAS_MODEM_FW,
@@ -952,6 +955,11 @@ struct platform_device msm_8960_riva = {
 
 struct platform_device msm_pil_tzapps = {
 	.name = "pil_tzapps",
+	.id = -1,
+};
+
+struct platform_device msm_pil_vidc = {
+	.name = "pil_vidc",
 	.id = -1,
 };
 
@@ -2382,7 +2390,7 @@ static struct kgsl_device_platform_data kgsl_3d0_pdata = {
 	.init_level = 0,
 	.num_levels = 5,
 	.set_grp_async = NULL,
-	.idle_timeout = HZ/20,
+	.idle_timeout = HZ/12,
 	.nap_allowed = true,
 	.clk_map = KGSL_CLK_CORE | KGSL_CLK_IFACE | KGSL_CLK_MEM_IFACE,
 #ifdef CONFIG_MSM_BUS_SCALING

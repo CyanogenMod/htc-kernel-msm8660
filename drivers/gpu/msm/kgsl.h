@@ -21,8 +21,12 @@
 #include <linux/mutex.h>
 #include <linux/cdev.h>
 #include <linux/regulator/consumer.h>
+#include <linux/mm.h>
 
 #define KGSL_NAME "kgsl"
+
+/* Timestamp window used to detect rollovers */
+#define KGSL_TIMESTAMP_WINDOW 0x80000000
 
 /*cache coherency ops */
 #define DRM_KGSL_GEM_CACHE_OP_TO_DEV	0x0001
@@ -102,7 +106,15 @@ struct kgsl_driver {
 extern struct kgsl_driver kgsl_driver;
 
 struct kgsl_pagetable;
-struct kgsl_memdesc_ops;
+struct kgsl_memdesc;
+
+struct kgsl_memdesc_ops {
+	int (*vmflags)(struct kgsl_memdesc *);
+	int (*vmfault)(struct kgsl_memdesc *, struct vm_area_struct *,
+		       struct vm_fault *);
+	void (*free)(struct kgsl_memdesc *memdesc);
+	int (*map_kernel_mem)(struct kgsl_memdesc *);
+};
 
 /* shared memory allocation */
 struct kgsl_memdesc {
@@ -181,13 +193,15 @@ static inline int kgsl_gpuaddr_in_memdesc(const struct kgsl_memdesc *memdesc,
 	}
 	return 0;
 }
-static inline uint8_t *kgsl_gpuaddr_to_vaddr(const struct kgsl_memdesc *memdesc,
+static inline uint8_t *kgsl_gpuaddr_to_vaddr(struct kgsl_memdesc *memdesc,
 					     unsigned int gpuaddr)
 {
-	if (memdesc->hostptr == NULL || memdesc->gpuaddr == 0 ||
-		(gpuaddr < memdesc->gpuaddr ||
-		gpuaddr >= memdesc->gpuaddr + memdesc->size))
-		return NULL;
+	if (memdesc->gpuaddr == 0 ||
+		gpuaddr < memdesc->gpuaddr ||
+		gpuaddr >= (memdesc->gpuaddr + memdesc->size) ||
+		(NULL == memdesc->hostptr && memdesc->ops->map_kernel_mem &&
+			memdesc->ops->map_kernel_mem(memdesc)))
+			return NULL;
 
 	return memdesc->hostptr + (gpuaddr - memdesc->gpuaddr);
 }
@@ -199,7 +213,7 @@ static inline int timestamp_cmp(unsigned int new, unsigned int old)
 	if (ts_diff == 0)
 		return 0;
 
-	return ((ts_diff > 0) || (ts_diff < -20000)) ? 1 : -1;
+	return ((ts_diff > 0) || (ts_diff < -KGSL_TIMESTAMP_WINDOW)) ? 1 : -1;
 }
 
 static inline void

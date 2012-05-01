@@ -132,12 +132,6 @@ void hdmi_msm_cec_init(void)
 		| HDMI_MSM_CEC_REFTIMER_REFTIMER(27 * 50)
 		);
 
-	/* 0x02A4 CEC_TIME */
-	HDMI_OUTP(0x02A4,
-		HDMI_MSM_CEC_TIME_SIGNAL_FREE_TIME(350)
-		| HDMI_MSM_CEC_TIME_ENABLE
-		);
-
 	/*
 	 * 0x02A0 CEC_ADDR
 	 * Starting with a default address of 4
@@ -227,8 +221,13 @@ void hdmi_msm_cec_msg_send(struct hdmi_msm_cec_msg *msg)
 
 	/* 0x0294 HDMI_MSM_CEC_RETRANSMIT */
 	HDMI_OUTP(0x0294,
+#ifdef DRVR_ONLY_CECT_NO_DAEMON
 		HDMI_MSM_CEC_RETRANSMIT_NUM(msg->retransmit)
 		| (msg->retransmit > 0) ? HDMI_MSM_CEC_RETRANSMIT_ENABLE : 0);
+#else
+		HDMI_MSM_CEC_RETRANSMIT_NUM(0) |
+			HDMI_MSM_CEC_RETRANSMIT_ENABLE);
+#endif
 
 	/* 0x028C CEC_CTRL */
 	HDMI_OUTP(0x028C, 0x1 | msg->frame_size << 4);
@@ -2431,7 +2430,7 @@ static int hdcp_authentication_part1(void)
 			[7:0] LINK0_AKSV_1 */
 		/* LINK0_AINFO	= 0x2 FEATURE 1.1 on.
 		 *		= 0x0 FEATURE 1.1 off*/
-		HDMI_OUTP(0x0148, 0x2 << 8);
+		HDMI_OUTP(0x0148, 0x0);
 
 		/* 0x012C HDCP_ENTROPY_CTRL0
 			[31:0] BITS_OF_INFLUENCE_0 */
@@ -2498,12 +2497,6 @@ static int hdcp_authentication_part1(void)
 			mutex_unlock(&hdcp_auth_state_mutex);
 			goto error;
 		}
-
-		/*
-		 * A small delay is needed here to avoid device crash observed
-		 * during reauthentication in MSM8960
-		 */
-		msleep(20);
 
 		/* 0x0168 HDCP_RCVPORT_DATA12
 		   [23:8] BSTATUS

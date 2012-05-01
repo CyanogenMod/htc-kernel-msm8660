@@ -68,6 +68,8 @@
 #define SPS_SDCC_CONSUMER_PIPE_INDEX	2
 #define SPS_CONS_PERIPHERAL		0
 #define SPS_PROD_PERIPHERAL		1
+/* Use SPS only if transfer size is more than this macro */
+#define SPS_MIN_XFER_SIZE		MCI_FIFOSIZE
 
 #if defined(CONFIG_DEBUG_FS)
 static void msmsdcc_dbg_createhost(struct msmsdcc_host *);
@@ -757,13 +759,32 @@ msmsdcc_dma_complete_func(struct msm_dmov_cmd *cmd,
 	tasklet_schedule(&host->dma_tlet);
 }
 
-static int msmsdcc_check_dma_op_req(struct mmc_data *data)
+static bool msmsdcc_is_dma_possible(struct msmsdcc_host *host,
+				    struct mmc_data *data)
 {
-	if (((data->blksz * data->blocks) < MCI_FIFOSIZE) ||
-	     ((data->blksz * data->blocks) % MCI_FIFOSIZE))
-		return -EINVAL;
-	else
-		return 0;
+	bool ret = true;
+	u32 xfer_size = data->blksz * data->blocks;
+
+	if (host->is_sps_mode) {
+		/*
+		 * BAM Mode: Fall back on PIO if size is less
+		 * than or equal to SPS_MIN_XFER_SIZE bytes.
+		 */
+		if (xfer_size <= SPS_MIN_XFER_SIZE)
+			ret = false;
+	} else if (host->is_dma_mode) {
+		/*
+		 * ADM Mode: Fall back on PIO if size is less than FIFO size
+		 * or not integer multiple of FIFO size
+		 */
+		if (xfer_size % MCI_FIFOSIZE)
+			ret = false;
+	} else {
+		/* PIO Mode */
+		ret = false;
+	}
+
+	return ret;
 }
 
 static int msmsdcc_config_dma(struct msmsdcc_host *host, struct mmc_data *data)
@@ -1070,7 +1091,7 @@ msmsdcc_start_data(struct msmsdcc_host *host, struct mmc_data *data,
 	if (host->curr.wait_for_auto_prog_done)
 		datactrl |= MCI_AUTO_PROG_DONE;
 
-	if (!msmsdcc_check_dma_op_req(data)) {
+	if (msmsdcc_is_dma_possible(host, data)) {
 		if (host->is_dma_mode && !msmsdcc_config_dma(host, data)) {
 			datactrl |= MCI_DPSM_DMAENABLE;
 		} else if (host->is_sps_mode) {
@@ -3161,14 +3182,15 @@ out:
 static int find_most_appropriate_phase(struct msmsdcc_host *host,
 				u8 *phase_table, u8 total_phases)
 {
+	#define MAX_PHASES 16
 	int ret;
-	u8 ranges[16][16] = { {0}, {0} };
-	u8 phases_per_row[16] = {0};
+	u8 ranges[MAX_PHASES][MAX_PHASES] = { {0}, {0} };
+	u8 phases_per_row[MAX_PHASES] = {0};
 	int row_index = 0, col_index = 0, selected_row_index = 0, curr_max = 0;
 	int i, cnt, phase_0_raw_index = 0, phase_15_raw_index = 0;
 	bool phase_0_found = false, phase_15_found = false;
 
-	if (total_phases > 16) {
+	if (!total_phases || (total_phases > MAX_PHASES)) {
 		pr_err("%s: %s: invalid argument: total_phases=%d\n",
 			mmc_hostname(host->mmc), __func__, total_phases);
 		return -EINVAL;
@@ -3188,6 +3210,9 @@ static int find_most_appropriate_phase(struct msmsdcc_host *host,
 		}
 	}
 
+	if (row_index >= MAX_PHASES)
+		return -EINVAL;
+
 	/* Check if phase-0 is present in first valid window? */
 	if (!ranges[0][0]) {
 		phase_0_found = true;
@@ -3195,7 +3220,7 @@ static int find_most_appropriate_phase(struct msmsdcc_host *host,
 		/* Check if cycle exist between 2 valid windows */
 		for (cnt = 1; cnt <= row_index; cnt++) {
 			if (phases_per_row[cnt]) {
-				for (i = 0; i <= phases_per_row[cnt]; i++) {
+				for (i = 0; i < phases_per_row[cnt]; i++) {
 					if (ranges[cnt][i] == 15) {
 						phase_15_found = true;
 						phase_15_raw_index = cnt;
@@ -3213,12 +3238,23 @@ static int find_most_appropriate_phase(struct msmsdcc_host *host,
 		/* number of phases in raw where phase 15 is present */
 		u8 phases_15 = phases_per_row[phase_15_raw_index];
 
-		cnt = 0;
-		for (i = phases_15; i < (phases_15 + phases_0); i++) {
+		if (phases_0 + phases_15 >= MAX_PHASES)
+			/*
+			 * If there are more than 1 phase windows then total
+			 * number of phases in both the windows should not be
+			 * more than or equal to MAX_PHASES.
+			 */
+			return -EINVAL;
+
+		/* Merge 2 cyclic windows */
+		i = phases_15;
+		for (cnt = 0; cnt < phases_0; cnt++) {
 			ranges[phase_15_raw_index][i] =
 				ranges[phase_0_raw_index][cnt];
-			cnt++;
+			if (++i >= MAX_PHASES)
+				break;
 		}
+
 		phases_per_row[phase_0_raw_index] = 0;
 		phases_per_row[phase_15_raw_index] = phases_15 + phases_0;
 	}
@@ -3230,8 +3266,17 @@ static int find_most_appropriate_phase(struct msmsdcc_host *host,
 		}
 	}
 
-	i = ((curr_max * 3) / 4) - 1;
+	i = ((curr_max * 3) / 4);
+	if (i)
+		i--;
+
 	ret = (int)ranges[selected_row_index][i];
+
+	if (ret >= MAX_PHASES) {
+		ret = -EINVAL;
+		pr_err("%s: %s: invalid phase selected=%d\n",
+			mmc_hostname(host->mmc), __func__, ret);
+	}
 
 	return ret;
 }
@@ -3806,13 +3851,11 @@ static int msmsdcc_sps_init(struct msmsdcc_host *host)
 	/*
 	 * This threshold controls when the BAM publish
 	 * the descriptor size on the sideband interface.
-	 * SPS HW will only be used when
-	 * data transfer size >  MCI_FIFOSIZE (64 bytes).
-	 * PIO mode will be used when
-	 * data transfer size < MCI_FIFOSIZE (64 bytes).
-	 * So set this thresold value to 64 bytes.
+	 * SPS HW will be used for data transfer size even
+	 * less than SDCC FIFO size. So let's set BAM summing
+	 * thresold to SPS_MIN_XFER_SIZE bytes.
 	 */
-	bam.summing_threshold = 64;
+	bam.summing_threshold = SPS_MIN_XFER_SIZE;
 	/* SPS driver wll handle the SDCC BAM IRQ */
 	bam.irq = (u32)host->bam_irqres->start;
 	bam.manage = SPS_BAM_MGR_LOCAL;
@@ -3993,7 +4036,7 @@ static void msmsdcc_dump_sdcc_state(struct msmsdcc_host *host)
 		msmsdcc_print_regs("SDCC-CORE", host->base, 28);
 
 	if (host->curr.data) {
-		if (msmsdcc_check_dma_op_req(host->curr.data))
+		if (!msmsdcc_is_dma_possible(host, host->curr.data))
 			pr_info("%s: PIO mode\n", mmc_hostname(host->mmc));
 		else if (host->is_dma_mode)
 			pr_info("%s: ADM mode: busy=%d, chnl=%d, crci=%d\n",

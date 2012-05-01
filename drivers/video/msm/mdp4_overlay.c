@@ -314,7 +314,7 @@ void mdp4_overlay_dmap_cfg(struct msm_fb_data_type *mfd, int lcdc)
 
 	/* dma2 config register */
 	curr = inpdw(MDP_BASE + 0x90000);
-	mask = 0xBFFFFFFF;
+	mask = 0x0FFFFFFF;
 	dma2_cfg_reg = (dma2_cfg_reg & mask) | (curr & ~mask);
 	MDP_OUTP(MDP_BASE + 0x90000, dma2_cfg_reg);
 
@@ -1167,6 +1167,7 @@ void mdp4_overlayproc_cfg(struct mdp4_overlay_pipe *pipe)
 {
 	uint32 data, intf;
 	char *overlay_base;
+	uint32 curr;
 
 	intf = 0;
 	if (pipe->mixer_num == MDP4_MIXER2)
@@ -1208,10 +1209,13 @@ void mdp4_overlayproc_cfg(struct mdp4_overlay_pipe *pipe)
 			outpdw(overlay_base + 0x001c, pipe->blt_addr + off);
 			/* MDDI - BLT + on demand */
 			outpdw(overlay_base + 0x0004, 0x08);
+
+			curr = inpdw(overlay_base + 0x0014);
+			curr &= 0x4;
 #ifdef BLT_RGB565
-			outpdw(overlay_base + 0x0014, 0x1); /* RGB565 */
+			outpdw(overlay_base + 0x0014, curr | 0x1); /* RGB565 */
 #else
-			outpdw(overlay_base + 0x0014, 0x0); /* RGB888 */
+			outpdw(overlay_base + 0x0014, curr | 0x0); /* RGB888 */
 #endif
 		} else if (pipe->mixer_num == MDP4_MIXER2) {
 			if (ctrl->panel_mode & MDP4_PANEL_WRITEBACK) {
@@ -1238,7 +1242,9 @@ void mdp4_overlayproc_cfg(struct mdp4_overlay_pipe *pipe)
 				/* MDDI - BLT + on demand */
 				outpdw(overlay_base + 0x0004, 0x08);
 				/* pseudo planar + writeback */
-				outpdw(overlay_base + 0x0014, 0x012);
+				curr = inpdw(overlay_base + 0x0014);
+				curr &= 0x4;
+				outpdw(overlay_base + 0x0014, curr | 0x012);
 				/* rgb->yuv */
 				outpdw(overlay_base + 0x0200, 0x05);
 			}
@@ -1255,6 +1261,8 @@ void mdp4_overlayproc_cfg(struct mdp4_overlay_pipe *pipe)
 
 	if (pipe->mixer_num == MDP4_MIXER1) {
 		if (intf == TV_INTF) {
+			curr = inpdw(overlay_base + 0x0014);
+			curr &= 0x4;
 			outpdw(overlay_base + 0x0014, 0x02); /* yuv422 */
 			/* overlay1 CSC config */
 			outpdw(overlay_base + 0x0200, 0x05); /* rgb->yuv */
@@ -1262,7 +1270,9 @@ void mdp4_overlayproc_cfg(struct mdp4_overlay_pipe *pipe)
 	}
 
 #ifdef MDP4_IGC_LUT_ENABLE
-	outpdw(overlay_base + 0x0014, 0x4);	/* GC_LUT_EN, 888 */
+	curr = inpdw(overlay_base + 0x0014);
+	curr &= ~0x4;
+	outpdw(overlay_base + 0x0014, curr | 0x4);	/* GC_LUT_EN, 888 */
 #endif
 
 	if (mdp_is_in_isr == FALSE)
@@ -2288,18 +2298,22 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 		mfd->use_ov0_blt |= (use_blt << (pipe->pipe_ndx-1));
 	}
 
-	if (!IS_ERR_OR_NULL(mfd->iclient)) {
-		if (pipe->flags & MDP_SECURE_OVERLAY_SESSION)
-			mfd->mem_hid |= ION_SECURE;
-		else
-			mfd->mem_hid &= ~ION_SECURE;
-	}
-
 	/* return id back to user */
 	req->id = pipe->pipe_ndx;	/* pipe_ndx start from 1 */
 	pipe->req_data = *req;		/* keep original req */
 
 	pipe->flags = req->flags;
+
+	if (!IS_ERR_OR_NULL(mfd->iclient)) {
+		pr_debug("pipe->flags 0x%x\n", pipe->flags);
+		if (pipe->flags & MDP_SECURE_OVERLAY_SESSION) {
+			mfd->mem_hid &= ~BIT(ION_IOMMU_HEAP_ID);
+			mfd->mem_hid |= ION_SECURE;
+		} else {
+			mfd->mem_hid |= BIT(ION_IOMMU_HEAP_ID);
+			mfd->mem_hid &= ~ION_SECURE;
+		}
+	}
 
 	if (pipe->flags & MDP_SHARPENING) {
 		bool test = ((pipe->req_data.dpp.sharp_strength > 0) &&
@@ -2327,6 +2341,15 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 	if (ctrl->panel_mode & MDP4_PANEL_DTV &&
 	    pipe->mixer_num == MDP4_MIXER1) {
 		u32 use_blt = mdp4_overlay_blt_enable(req, mfd, perf_level);
+
+		if (hdmi_prim_display) {
+			if (!mdp4_overlay_is_rgb_type(req->src.format) &&
+				pipe->pipe_type == OVERLAY_TYPE_VIDEO &&
+				(req->src_rect.h > req->dst_rect.h ||
+				req->src_rect.w > req->dst_rect.w))
+				use_blt = 1;
+		}
+
 		mdp4_overlay_dtv_set(mfd, pipe);
 		mfd->use_ov1_blt &= ~(1 << (pipe->pipe_ndx-1));
 		mfd->use_ov1_blt |= (use_blt << (pipe->pipe_ndx-1));
@@ -2403,9 +2426,13 @@ int mdp4_overlay_unset(struct fb_info *info, int ndx)
 #endif
 	}
 
-	if (mfd->mdp_rev >= MDP_REV_41 && !mfd->use_ov0_blt &&
+	if (mfd->mdp_rev >= MDP_REV_42 && !mfd->use_ov0_blt &&
 		(pipe->mixer_num == MDP4_MIXER0)) {
-		ctrl->stage[pipe->mixer_num][pipe->mixer_stage] = NULL;
+			ctrl->stage[pipe->mixer_num][pipe->mixer_stage] = NULL;
+	} else if (mfd->mdp_rev == MDP_REV_41 &&
+		mdp4_overlay_is_rgb_type(pipe->src_format) &&
+		!mfd->use_ov0_blt && (pipe->mixer_num == MDP4_MIXER0)) {
+			ctrl->stage[pipe->mixer_num][pipe->mixer_stage] = NULL;
 	} else {
 		mdp4_mixer_stage_down(pipe);
 

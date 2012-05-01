@@ -38,6 +38,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/mfd/pm8xxx/pm8921-charger.h>
 #include <linux/pm_qos_params.h>
+#include <linux/power_supply.h>
 
 #include <mach/clk.h>
 #include <mach/msm_xo.h>
@@ -46,7 +47,7 @@
 #define MSM_USB_BASE	(motg->regs)
 #define DRIVER_NAME	"msm_otg"
 
-#define ID_TIMER_FREQ		(jiffies + msecs_to_jiffies(2000))
+#define ID_TIMER_FREQ		(jiffies + msecs_to_jiffies(500))
 #define ULPI_IO_TIMEOUT_USEC	(10 * 1000)
 
 #define USB_PHY_3P3_VOL_MIN	3050000 /* uV */
@@ -897,31 +898,33 @@ skip_phy_resume:
 }
 #endif
 
-static int msm_otg_notify_chg_type(struct msm_otg *motg)
+static int msm_otg_notify_power_supply(struct msm_otg *motg, unsigned mA)
 {
-	static int charger_type;
-	/*
-	 * TODO
-	 * Unify OTG driver charger types and power supply charger types
-	 */
-	if (charger_type == motg->chg_type)
+	struct power_supply *psy;
+
+	psy = power_supply_get_by_name("usb");
+	if (!psy)
+		goto psy_not_supported;
+
+	if (motg->cur_power == 0 && mA > 0) {
+		/* Enable charging */
+		if (power_supply_set_online(psy, true))
+			goto psy_not_supported;
+	} else if (motg->cur_power > 0 && mA == 0) {
+		/* Disable charging */
+		if (power_supply_set_online(psy, false))
+			goto psy_not_supported;
 		return 0;
+	}
+	/* Set max current limit */
+	if (power_supply_set_current_limit(psy, 1000*mA))
+		goto psy_not_supported;
 
-	if (motg->chg_type == USB_SDP_CHARGER)
-		charger_type = POWER_SUPPLY_TYPE_USB;
-	else if (motg->chg_type == USB_CDP_CHARGER)
-		charger_type = POWER_SUPPLY_TYPE_USB_CDP;
-	else if (motg->chg_type == USB_DCP_CHARGER)
-		charger_type = POWER_SUPPLY_TYPE_USB_DCP;
-	else if ((motg->chg_type == USB_ACA_DOCK_CHARGER ||
-		motg->chg_type == USB_ACA_A_CHARGER ||
-		motg->chg_type == USB_ACA_B_CHARGER ||
-		motg->chg_type == USB_ACA_C_CHARGER))
-		charger_type = POWER_SUPPLY_TYPE_USB_ACA;
-	else
-		charger_type = POWER_SUPPLY_TYPE_BATTERY;
+	return 0;
 
-	return pm8921_set_usb_power_supply_type(charger_type);
+psy_not_supported:
+	dev_dbg(motg->otg.dev, "Power Supply doesn't support USB charger\n");
+	return -ENXIO;
 }
 
 static void msm_otg_notify_charger(struct msm_otg *motg, unsigned mA)
@@ -933,16 +936,18 @@ static void msm_otg_notify_charger(struct msm_otg *motg, unsigned mA)
 			mA > IDEV_ACA_CHG_LIMIT)
 		mA = IDEV_ACA_CHG_LIMIT;
 
-	if (msm_otg_notify_chg_type(motg))
-		dev_err(motg->otg.dev,
-			"Failed notifying %d charger type to PMIC\n",
-							motg->chg_type);
-
 	if (motg->cur_power == mA)
 		return;
 
 	dev_info(motg->otg.dev, "Avail curr from USB = %u\n", mA);
-	pm8921_charger_vbus_draw(mA);
+
+	/*
+	 *  Use Power Supply API if supported, otherwise fallback
+	 *  to legacy pm8921 API.
+	 */
+	if (msm_otg_notify_power_supply(motg, mA))
+		pm8921_charger_vbus_draw(mA);
+
 	motg->cur_power = mA;
 }
 
@@ -2210,6 +2215,27 @@ const struct file_operations msm_otg_mode_fops = {
 	.release = single_release,
 };
 
+static int msm_otg_show_otg_state(struct seq_file *s, void *unused)
+{
+	struct msm_otg *motg = s->private;
+	struct otg_transceiver *otg = &motg->otg;
+
+	seq_printf(s, "%s\n", otg_state_string(otg->state));
+	return 0;
+}
+
+static int msm_otg_otg_state_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, msm_otg_show_otg_state, inode->i_private);
+}
+
+const struct file_operations msm_otg_state_fops = {
+	.open = msm_otg_otg_state_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 static int msm_otg_show_chg_type(struct seq_file *s, void *unused)
 {
 	struct msm_otg *motg = s->private;
@@ -2370,6 +2396,14 @@ static int msm_otg_debugfs_init(struct msm_otg *motg)
 	msm_otg_dentry = debugfs_create_file("bus_voting", S_IRUGO | S_IWUSR,
 		msm_otg_dbg_root, motg,
 		&msm_otg_bus_fops);
+
+	if (!msm_otg_dentry) {
+		debugfs_remove_recursive(msm_otg_dbg_root);
+		return -ENODEV;
+	}
+
+	msm_otg_dentry = debugfs_create_file("otg_state", S_IRUGO,
+				msm_otg_dbg_root, motg, &msm_otg_state_fops);
 
 	if (!msm_otg_dentry) {
 		debugfs_remove_recursive(msm_otg_dbg_root);

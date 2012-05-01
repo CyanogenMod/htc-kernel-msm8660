@@ -155,7 +155,7 @@ struct sx150x_platform_data msm8960_sx150x_data[] = {
 
 #define MSM8960_FIXED_AREA_START 0xb0000000
 #define MAX_FIXED_AREA_SIZE	0x10000000
-#define MSM_MM_FW_SIZE		0x280000
+#define MSM_MM_FW_SIZE		0x200000
 #define MSM8960_FW_START	(MSM8960_FIXED_AREA_START - MSM_MM_FW_SIZE)
 
 static unsigned msm_ion_sf_size = MSM_ION_SF_SIZE;
@@ -692,6 +692,7 @@ static void reserve_cache_dump_memory(void)
 #ifdef CONFIG_MSM_CACHE_DUMP
 	unsigned int spare;
 	unsigned int l1_size;
+	unsigned int l2_size;
 	unsigned int total;
 	int ret;
 
@@ -702,10 +703,18 @@ static void reserve_cache_dump_memory(void)
 		/* Fall back to something reasonable here */
 		l1_size = L1_BUFFER_SIZE;
 
-	total = l1_size + L2_BUFFER_SIZE;
+	ret = scm_call(L1C_SERVICE_ID, L2C_BUFFER_GET_SIZE_COMMAND_ID, &spare,
+		sizeof(spare), &l2_size, sizeof(l2_size));
+
+	if (ret)
+		/* Fall back to something reasonable here */
+		l2_size = L2_BUFFER_SIZE;
+
+	total = l1_size + l2_size;
 
 	msm8960_reserve_table[MEMTYPE_EBI1].size += total;
 	msm_cache_dump_pdata.l1_size = l1_size;
+	msm_cache_dump_pdata.l2_size = l2_size;
 #endif
 }
 
@@ -854,7 +863,7 @@ static struct tabla_pdata tabla_platform_data = {
 	.micbias = {
 		.ldoh_v = TABLA_LDOH_2P85_V,
 		.cfilt1_mv = 1800,
-		.cfilt2_mv = 1800,
+		.cfilt2_mv = 2700,
 		.cfilt3_mv = 1800,
 		.bias1_cfilt_sel = TABLA_CFILT1_SEL,
 		.bias2_cfilt_sel = TABLA_CFILT2_SEL,
@@ -921,7 +930,7 @@ static struct tabla_pdata tabla20_platform_data = {
 	.micbias = {
 		.ldoh_v = TABLA_LDOH_2P85_V,
 		.cfilt1_mv = 1800,
-		.cfilt2_mv = 1800,
+		.cfilt2_mv = 2700,
 		.cfilt3_mv = 1800,
 		.bias1_cfilt_sel = TABLA_CFILT1_SEL,
 		.bias2_cfilt_sel = TABLA_CFILT2_SEL,
@@ -2213,6 +2222,7 @@ static struct platform_device *cdp_devices[] __initdata = {
 	&msm_8960_q6_mss_sw,
 	&msm_8960_riva,
 	&msm_pil_tzapps,
+	&msm_pil_vidc,
 	&msm8960_device_otg,
 	&msm8960_device_gadget_peripheral,
 	&msm_device_hsusb_host,
