@@ -411,6 +411,12 @@ struct msm_fb_platform_data {
 	int (*allow_set_offset)(void);
 	char prim_panel_name[PANEL_NAME_MAX_LEN];
 	char ext_panel_name[PANEL_NAME_MAX_LEN];
+
+	/* HTC Extension */
+	int blt_mode;
+	uint32_t width;
+	uint32_t height;
+	bool is_3d_panel;
 };
 
 struct msm_hdmi_platform_data {

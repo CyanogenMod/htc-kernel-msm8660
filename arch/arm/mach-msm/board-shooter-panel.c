@@ -1,6 +1,7 @@
-/* linux/arch/arm/mach-msm/display/shooter-panel.c
+/* arch/arm/mach-msm/board-shooter-panel.c
  *
  * Copyright (c) 2011 HTC.
+ * Copyright (c) 2012 The CyanogenMod Project.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -549,40 +550,40 @@ static struct mipi_dsi_platform_data mipi_pdata = {
 
 static char novatek_unlock[] =
 {
-        0xF3, 0xAA,
+	0xF3, 0xAA,
 };
 
 static char novatek_lock[] =
 {
-        0xFF, 0xAA,
+	0xFF, 0xAA,
 };
 
 static char novatek_2vci[] =
 {
-        0x03, 0x33,
+	0x03, 0x33,
 };
 
 static char novatek_3vci[] =
 {
-        0x03, 0x36,
+	0x03, 0x36,
 };
 
 static struct dsi_cmd_desc novatek_2vci_cmds[] = {
-        {DTYPE_DCS_WRITE1, 1, 0, 0, 0,
-                sizeof(novatek_unlock), novatek_unlock},
-        {DTYPE_DCS_WRITE1, 1, 0, 0, 0,
-                sizeof(novatek_2vci), novatek_2vci},
-        {DTYPE_DCS_WRITE1, 1, 0, 0, 0,
-                sizeof(novatek_lock), novatek_lock},
+	{DTYPE_DCS_WRITE1, 1, 0, 0, 0,
+		sizeof(novatek_unlock), novatek_unlock},
+	{DTYPE_DCS_WRITE1, 1, 0, 0, 0,
+		sizeof(novatek_2vci), novatek_2vci},
+	{DTYPE_DCS_WRITE1, 1, 0, 0, 0,
+		sizeof(novatek_lock), novatek_lock},
 };
 
 static struct dsi_cmd_desc novatek_3vci_cmds[] = {
-        {DTYPE_DCS_WRITE1, 1, 0, 0, 0,
-                sizeof(novatek_unlock), novatek_unlock},
-        {DTYPE_DCS_WRITE1, 1, 0, 0, 0,
-                sizeof(novatek_2vci), novatek_3vci},
-        {DTYPE_DCS_WRITE1, 1, 0, 0, 0,
-                sizeof(novatek_lock), novatek_lock},
+	{DTYPE_DCS_WRITE1, 1, 0, 0, 0,
+		sizeof(novatek_unlock), novatek_unlock},
+	{DTYPE_DCS_WRITE1, 1, 0, 0, 0,
+		sizeof(novatek_2vci), novatek_3vci},
+	{DTYPE_DCS_WRITE1, 1, 0, 0, 0,
+		sizeof(novatek_lock), novatek_lock},
 };
 
 #define BRI_SETTING_MIN		30
@@ -601,15 +602,15 @@ static unsigned char shooter_shrink_pwm(int val)
 	if (val <= 0) {
 		shrink_br = 0;
 	} else if (val > 0 && (val < BRI_SETTING_MIN)) {
-                shrink_br = PWM_MIN;
-        } else if ((val >= BRI_SETTING_MIN) && (val <= BRI_SETTING_DEF)) {
-                shrink_br = (val - BRI_SETTING_MIN) * (PWM_DEFAULT - PWM_MIN) /
+		shrink_br = PWM_MIN;
+	} else if ((val >= BRI_SETTING_MIN) && (val <= BRI_SETTING_DEF)) {
+		shrink_br = (val - BRI_SETTING_MIN) * (PWM_DEFAULT - PWM_MIN) /
 			(BRI_SETTING_DEF - BRI_SETTING_MIN) + PWM_MIN;
-        } else if (val > BRI_SETTING_DEF && val <= BRI_SETTING_MAX) {
-                shrink_br = (val - BRI_SETTING_DEF) * (PWM_MAX - PWM_DEFAULT) /
+	} else if (val > BRI_SETTING_DEF && val <= BRI_SETTING_MAX) {
+		shrink_br = (val - BRI_SETTING_DEF) * (PWM_MAX - PWM_DEFAULT) /
 			(BRI_SETTING_MAX - BRI_SETTING_DEF) + PWM_DEFAULT;
-        } else if (val > BRI_SETTING_MAX)
-                shrink_br = PWM_MAX;
+	} else if (val > BRI_SETTING_MAX)
+		shrink_br = PWM_MAX;
 
 	if (atomic_read(&g_3D_mode) != OFF_3D && shrink_br != 0)
 		shrink_br = 255;
@@ -629,7 +630,7 @@ static struct platform_device mipi_dsi_cmd_sharp_qhd_panel_device = {
 	.name = "mipi_novatek",
 	.id = 0,
 	.dev = {
-               .platform_data = &mipi_novatek_panel_data,
+		.platform_data = &mipi_novatek_panel_data,
 	}
 };
 
@@ -657,8 +658,8 @@ static int msm_fb_detect_panel(const char *name)
 static struct msm_fb_platform_data msm_fb_pdata = {
 	.detect_client = msm_fb_detect_panel,
 //	.blt_mode = 1,
-//	.width = 53,
-//	.height = 95,
+	.width = 53,
+	.height = 95,
 };
 
 static struct resource msm_fb_resources[] = {
