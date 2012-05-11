@@ -97,7 +97,7 @@ obj-$(CONFIG_EISA)		+= eisa/
 obj-y				+= lguest/
 obj-$(CONFIG_CPU_FREQ)		+= cpufreq/
 obj-$(CONFIG_CPU_IDLE)		+= cpuidle/
-ifndef CONFIG_HTC_DEVICE
+ifndef CONFIG_HTC_MMC
 obj-$(CONFIG_MMC)		+= mmc/
 else
 obj-$(CONFIG_MMC)		+= mmc_htc/

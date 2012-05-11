@@ -90,11 +90,11 @@ source "drivers/usb/Kconfig"
 
 source "drivers/uwb/Kconfig"
 
-if !HTC_DEVICE
+if !HTC_MMC
 source "drivers/mmc/Kconfig"
 endif
 
-if HTC_DEVICE
+if HTC_MMC
 source "drivers/mmc_htc/Kconfig"
 endif
 

@@ -610,6 +610,10 @@ config HTC_DEVICE
 	default y if MACH_SHOOTER || MACH_SHOOTER_U
 	bool
 
+config HTC_MMC
+	default n if MACH_SHOOTER
+	bool
+
 config MACH_MSM8960_SIM
 	depends on ARCH_MSM8960
 	bool "MSM8960 Simulator"
