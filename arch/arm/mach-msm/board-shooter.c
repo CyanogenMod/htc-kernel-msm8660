@@ -4017,8 +4017,9 @@ static void __init msm8x60_init(void)
 	msm8x60_init_pm8058_othc();
 #endif
 
-	/* Accessory */
-	if (system_rev >= 1) {
+	printk(KERN_INFO "[HS_BOARD] (%s) system_rev = %d, engineerid = %d\n",
+	       __func__, system_rev, engineerid);
+	if ((system_rev == 2 && engineerid >= 1) || system_rev > 2) {
 		htc_headset_pmic_data.key_gpio =
 			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_REMO_PRES);
 		htc_headset_pmic_data.key_enable_gpio =
