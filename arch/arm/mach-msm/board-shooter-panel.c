@@ -37,6 +37,7 @@
 #include <linux/pmic8058-pwm.h>
 #include <linux/leds.h>
 #include <mach/debug_display.h>
+#include <mach/board-msm8660.h>
 
 #include "devices.h"
 #include "board-shooter.h"
@@ -67,9 +68,9 @@ struct dsi_cmd_desc {
 extern int panel_type;
 
 enum MODE_3D{
-	LANDSCAPE_3D  = 0,
-	PORTRAIT_3D,
-	OFF_3D,
+	OFF_3D = 0,
+	LANDSCAPE_3D  = 1,
+	PORTRAIT_3D = 2,
 };
 
 static struct pwm_device* pwm_3d = NULL;
@@ -1339,12 +1340,12 @@ static void shooter_3Dpanel_on(bool bLandscape)
 
 	if(system_rev >= 1) {
 		pwm_gpio_config.output_value = 1;
-		rc = pm8xxx_gpio_config(SHOOTER_3DLCM_PD, &pwm_gpio_config);
+		rc = pm8xxx_gpio_config(PM8058_GPIO_PM_TO_SYS(SHOOTER_3DLCM_PD), &pwm_gpio_config);
 		if (rc < 0)
 			pr_err("%s pmic gpio config gpio %d failed\n", __func__, SHOOTER_3DLCM_PD);
 	}
 
-	rc = pm8xxx_gpio_config(SHOOTER_3DCLK, &clk_gpio_config_on);
+	rc = pm8xxx_gpio_config(PM8058_GPIO_PM_TO_SYS(SHOOTER_3DCLK), &clk_gpio_config_on);
 	if (rc < 0)
 		pr_err("%s pmic gpio config gpio %d failed\n", __func__, SHOOTER_3DCLK);
 
@@ -1353,10 +1354,11 @@ static void shooter_3Dpanel_on(bool bLandscape)
 	pwm_conf.clk = PM_PWM_CLK_19P2MHZ;
 	pwm_conf.pre_div = PM_PWM_PREDIVIDE_3;
 	pwm_conf.pre_div_exp = 6;
-//TODO fix these. prolly why backlight doesnt come on less forced along with other things >_<
-//	pwm_conf.pwm_value = 255;
-//	pwm_conf.bypass_lut = 1;
-//	pwm_configure(pwm_3d, &pwm_conf);
+
+	pwm_conf.pwm_value = 255;
+	pwm_conf.bypass_lut = 1;
+	pwm_configure(pwm_3d, &pwm_conf);
+
 	pwm_enable(pwm_3d);
 
 	if(bLandscape) {
@@ -1385,14 +1387,14 @@ static void shooter_3Dpanel_off(void)
 
 	if(system_rev >= 1) {
 		pwm_gpio_config.output_value = 0;
-		rc = pm8xxx_gpio_config(SHOOTER_3DLCM_PD, &pwm_gpio_config);
+		rc = pm8xxx_gpio_config(PM8058_GPIO_PM_TO_SYS(SHOOTER_3DLCM_PD), &pwm_gpio_config);
 		if (rc < 0)
 			pr_err("%s pmic gpio config gpio %d failed\n", __func__, SHOOTER_3DLCM_PD);
 	}
 	mdp_color_enhancement(mdp_sharp_barrier_off, ARRAY_SIZE(mdp_sharp_barrier_off));
 	pwm_disable(pwm_3d);
 
-	rc = pm8xxx_gpio_config(SHOOTER_3DCLK, &clk_gpio_config_off);
+	rc = pm8xxx_gpio_config(PM8058_GPIO_PM_TO_SYS(SHOOTER_3DCLK), &clk_gpio_config_off);
 	if (rc < 0)
 		pr_err("%s pmic gpio config gpio %d failed\n", __func__, SHOOTER_3DCLK);
 	gpio_set_value(SHOOTER_CTL_3D_1, 0);
@@ -1414,8 +1416,7 @@ static ssize_t store_3D_mode(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	int val;
-	if ((buf[0] == '0' || buf[0] == '1' || buf[0] == '2')
-						&& buf[1] == '\n') {
+	if ((buf[0] == '0' || buf[0] == '1' || buf[0] == '2') && buf[1] < 33) {
 		val = buf[0] - 0x30;
 		if (val == atomic_read(&g_3D_mode)) {
 			printk(KERN_NOTICE "%s: status is same(%d)\n", __func__, atomic_read(&g_3D_mode));

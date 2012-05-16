@@ -567,6 +567,110 @@ static int pm8058_pwm_change_lut(struct pwm_device *pwm,
 	return rc;
 }
 
+#ifdef CONFIG_HTC_DEVICE
+static int pm8058_pwm_configure(struct pwm_device *pwm,
+			 struct pm8058_pwm_period *pwm_conf)
+{
+	int	i, rc, len;
+	u8	reg;
+
+	reg = (pwm_conf->pwm_size > 6) ? PM8058_PWM_SIZE_9_BIT : 0;
+	pwm->pwm_ctl[5] = reg;
+
+	reg = ((pwm_conf->clk + 1) << PM8058_PWM_CLK_SEL_SHIFT)
+		& PM8058_PWM_CLK_SEL_MASK;
+	reg |= (pwm_conf->pre_div << PM8058_PWM_PREDIVIDE_SHIFT)
+		& PM8058_PWM_PREDIVIDE_MASK;
+	reg |= pwm_conf->pre_div_exp & PM8058_PWM_M_MASK;
+	pwm->pwm_ctl[4] = reg;
+
+	if (pwm_conf->bypass_lut) {
+		pwm->pwm_ctl[0] = 0;
+		pwm->pwm_ctl[1] = PM8058_PWM_BYPASS_LUT;
+		pwm->pwm_ctl[2] = 0;
+
+		if (pwm_conf->pwm_size > 6) {
+			pwm->pwm_ctl[3] = pwm_conf->pwm_value
+						& PM8058_PWM_VALUE_BIT7_0;
+			pwm->pwm_ctl[4] |= (pwm_conf->pwm_value >> 1)
+						& PM8058_PWM_VALUE_BIT8;
+		} else {
+			pwm->pwm_ctl[3] = pwm_conf->pwm_value
+						& PM8058_PWM_VALUE_BIT5_0;
+		}
+
+		len = 6;
+	} else {
+		int	pause_cnt, j;
+
+		/* Linear search for duty time */
+		for (i = 0; i < PM8058_PWM_1KHZ_COUNT_MAX; i++) {
+			if (duty_msec[i] >= pwm_conf->lut_duty_ms)
+				break;
+		}
+		pwm->pwm_ctl[0] = (i << PM8058_PWM_1KHZ_COUNT_SHIFT) &
+					PM8058_PWM_1KHZ_COUNT_MASK;
+		pwm->pwm_ctl[1] = pwm_conf->lut_hi_index &
+					PM8058_PWM_HIGH_INDEX_MASK;
+		pwm->pwm_ctl[2] = pwm_conf->lut_lo_index &
+					PM8058_PWM_LOW_INDEX_MASK;
+
+		if (pwm_conf->flags & PM_PWM_LUT_REVERSE)
+			pwm->pwm_ctl[1] |= PM8058_PWM_REVERSE_EN;
+		if (pwm_conf->flags & PM_PWM_LUT_RAMP_UP)
+			pwm->pwm_ctl[2] |= PM8058_PWM_RAMP_UP;
+		if (pwm_conf->flags & PM_PWM_LUT_LOOP)
+			pwm->pwm_ctl[2] |= PM8058_PWM_LOOP_EN;
+
+		/* Pause time */
+		if (pwm_conf->flags & PM_PWM_LUT_PAUSE_HI_EN) {
+			/* Linear search for pause time */
+			pause_cnt = (pwm_conf->lut_pause_hi + duty_msec[i] / 2)
+					/ duty_msec[i];
+			for (j = 0; j < PM8058_PWM_PAUSE_COUNT_MAX; j++) {
+				if (pause_count[j] >= pause_cnt)
+					break;
+			}
+			pwm->pwm_ctl[5] = (j <<
+					   PM8058_PWM_PAUSE_COUNT_HI_SHIFT) &
+						PM8058_PWM_PAUSE_COUNT_HI_MASK;
+			pwm->pwm_ctl[5] |= PM8058_PWM_PAUSE_ENABLE_HIGH;
+		} else
+			pwm->pwm_ctl[5] = 0;
+
+		if (pwm_conf->flags & PM_PWM_LUT_PAUSE_LO_EN) {
+			/* Linear search for pause time */
+			pause_cnt = (pwm_conf->lut_pause_lo + duty_msec[i] / 2)
+					/ duty_msec[i];
+			for (j = 0; j < PM8058_PWM_PAUSE_COUNT_MAX; j++) {
+				if (pause_count[j] >= pause_cnt)
+					break;
+			}
+			pwm->pwm_ctl[6] = (j <<
+					   PM8058_PWM_PAUSE_COUNT_LO_SHIFT) &
+						PM8058_PWM_PAUSE_COUNT_LO_MASK;
+			pwm->pwm_ctl[6] |= PM8058_PWM_PAUSE_ENABLE_LOW;
+		} else
+			pwm->pwm_ctl[6] = 0;
+
+		len = 7;
+	}
+
+	pm8058_pwm_bank_sel(pwm);
+
+	for (i = 0; i < len; i++) {
+		rc = pm8xxx_writeb(pwm->dev->parent,  SSBI_REG_ADDR_LPG_CTL(i), pwm->pwm_ctl[i]);
+		if (rc) {
+			pr_err("%s: pm8058_write(): rc=%d (PWM Ctl[%d])\n",
+				__func__, rc, i);
+			break;
+		}
+	}
+
+	return rc;
+}
+#endif
+
 /* APIs */
 /*
  * pwm_request - request a PWM device
@@ -672,6 +776,30 @@ out_unlock:
 	return rc;
 }
 EXPORT_SYMBOL(pwm_config);
+
+#ifdef CONFIG_HTC_DEVICE
+/*
+ * pwm_configure - change a PWM device configuration
+ */
+int pwm_configure(struct pwm_device *pwm, struct pm8058_pwm_period *pwm_conf)
+{
+	int	rc;
+
+	if (pwm == NULL || IS_ERR(pwm) || pwm_conf == NULL)
+		return -EINVAL;
+	if (pwm->chip == NULL)
+		return -ENODEV;
+
+	mutex_lock(&pwm->chip->pwm_mutex);
+	if (!pwm->in_use)
+		rc = -EINVAL;
+	else
+		rc = pm8058_pwm_configure(pwm, pwm_conf);
+	mutex_unlock(&pwm->chip->pwm_mutex);
+	return rc;
+}
+EXPORT_SYMBOL(pwm_configure);
+#endif
 
 /*
  * pwm_enable - start a PWM output toggling

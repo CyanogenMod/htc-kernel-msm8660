@@ -96,6 +96,20 @@ struct pm8058_pwm_period {
 	enum pm_pwm_clk		clk;
 	enum pm_pwm_pre_div	pre_div;
 	int			pre_div_exp;
+
+#ifdef CONFIG_HTC_DEVICE
+	// Additional support for 3D
+	int pwm_value;
+	int bypass_lut;
+
+	/* LUT parameters when bypass_lut is 0 */
+	int lut_duty_ms;
+	int lut_lo_index;
+	int lut_hi_index;
+	int lut_pause_hi;
+	int lut_pause_lo;
+	int flags;
+#endif
 };
 
 /**
@@ -139,6 +153,13 @@ int pm8058_pwm_lut_config(struct pwm_device *pwm, int period_us,
  * @start: to start (1), or stop (0)
  */
 int pm8058_pwm_lut_enable(struct pwm_device *pwm, int start);
+
+#ifdef CONFIG_HTC_DEVICE
+/*
+ * pwm_configure - change a PWM device configuration
+ */
+int pwm_configure(struct pwm_device *pwm, struct pm8058_pwm_period *pwm_conf);
+#endif
 
 int pm8058_pwm_set_dtest(struct pwm_device *pwm, int enable);
 
