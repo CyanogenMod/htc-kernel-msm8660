@@ -314,10 +314,45 @@ int gpio_event_matrix_func(struct gpio_event_input_devs *input_devs,
 	int key_count;
 	struct gpio_kp *kp;
 	struct gpio_event_matrix_info *mi;
+#ifdef CONFIG_HTC_DEVICE
+	int phone_call_status;
+	int fm_radio_status;
+	int irq;
+	static int irq_status = 1;
+#endif
 
 	mi = container_of(info, struct gpio_event_matrix_info, info);
 	if (func == GPIO_EVENT_FUNC_SUSPEND || func == GPIO_EVENT_FUNC_RESUME) {
 		/* TODO: disable scanning */
+#ifdef CONFIG_HTC_DEVICE
+		if (mi->detect_phone_status == 0) {
+			if (func == GPIO_EVENT_FUNC_SUSPEND)
+				irq_status = 0;
+			else
+				irq_status = 1;
+		} else {
+			phone_call_status = gpio_event_get_phone_call_status() & 0x01;
+			fm_radio_status = gpio_event_get_fm_radio_status() & 0x01;
+			pr_info("%s: mi->ninputs: %d, func&0x01 = %d, phone_call_status=%d, fm_radio_status=%d\n", __func__, mi->ninputs, func & 0x01, phone_call_status, fm_radio_status);
+
+			if (irq_status != ((func & 0x01) | phone_call_status | fm_radio_status)) {
+				irq_status = ((func & 0x01) | phone_call_status | fm_radio_status);
+				pr_info("%s: irq_status %d \n", __func__, irq_status);
+			} else {
+				pr_info("%s: irq_status %d, did not change\n", __func__, irq_status);
+				return 0;
+			}
+		}
+
+		for (i = 0; i < mi->ninputs; i++) {
+			irq = gpio_to_irq(mi->input_gpios[i]);
+			err = enable_irq_wake(irq);
+			if (err)
+				pr_err("gpiomatrix: set_irq_wake failed ,irq_status %d ,for input irq %d,%d\n",  irq_status, i, irq);
+			else
+				pr_info("%s: set ok,irq_status %d, irq %d = %d\n", __func__, irq_status, i, irq);
+		}
+#endif
 		return 0;
 	}
 

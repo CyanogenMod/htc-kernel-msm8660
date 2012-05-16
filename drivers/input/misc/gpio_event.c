@@ -21,6 +21,32 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 
+#ifdef CONFIG_HTC_DEVICE
+static unsigned char fm_radio_status;
+
+int gpio_event_get_fm_radio_status(void)
+{
+	return fm_radio_status;
+}
+
+static ssize_t fm_radio_store(struct device *dev,
+					 struct device_attribute *attr,
+					 const char *buf, size_t count)
+{
+	fm_radio_status = simple_strtoull(buf, NULL, 10);
+	pr_info("GPIO_EVENT:: fm_radio_status=%d\n", fm_radio_status);
+
+	return count;
+}
+static ssize_t fm_radio_show(struct device *dev,
+					struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "fm_radio_status:%d\n", fm_radio_status);
+}
+
+static DEVICE_ATTR(fm_radio, 0664, fm_radio_show, fm_radio_store);
+#endif
+
 struct gpio_event {
 	struct gpio_event_input_devs *input_devs;
 	const struct gpio_event_platform_data *info;
@@ -119,6 +145,74 @@ void gpio_event_resume(struct early_suspend *h)
 }
 #endif
 
+#ifdef CONFIG_HTC_DEVICE
+static unsigned char phone_call_status;
+int gpio_event_get_phone_call_status(void)
+{
+	return phone_call_status;
+}
+
+static int phone_call_status_store(const char *val, struct kernel_param *kp)
+{
+	int enabled = simple_strtol(val, NULL, 0);
+	phone_call_status = enabled;
+	printk(KERN_INFO "%s: phone_call_status %d\n", __func__, enabled);
+
+	return 0;
+}
+
+static int phone_call_status_show(char *buffer, struct kernel_param *kp)
+{
+	buffer[0] = '0' + phone_call_status;
+	return 1;
+}
+
+module_param_call(phone_call_status, phone_call_status_store, phone_call_status_show, NULL, 0664);
+
+static unsigned char enable_quickboot;
+int gpio_event_get_quickboot_status(void)
+{
+	return enable_quickboot;
+}
+
+static int enable_quickboot_store(const char *val, struct kernel_param *kp)
+{
+	int status = simple_strtol(val, NULL, 0);
+	enable_quickboot = status;
+	printk(KERN_INFO "%s: quick_boot_status %d\n", __func__, status);
+
+	return 0;
+}
+
+static int enable_quickboot_show(char *buffer, struct kernel_param *kp)
+{
+	buffer[0] = '0' + enable_quickboot;
+	return 1;
+}
+
+module_param_call(enable_quickboot, enable_quickboot_store, enable_quickboot_show, NULL, 0664);
+
+#ifdef CONFIG_PM
+static int gpio_event_sleep(struct platform_device *pdev, pm_message_t state)
+{
+	struct gpio_event *ip = platform_get_drvdata(pdev);
+
+	if (enable_quickboot == 0)
+		return 0;
+	return gpio_event_call_all_func(ip, GPIO_EVENT_FUNC_SUSPEND);
+}
+
+static int gpio_event_wakeup(struct platform_device *pdev)
+{
+	struct gpio_event *ip = platform_get_drvdata(pdev);
+
+	if (enable_quickboot == 0)
+		return 0;
+	return gpio_event_call_all_func(ip, GPIO_EVENT_FUNC_RESUME);
+}
+#endif
+#endif
+
 static int gpio_event_probe(struct platform_device *pdev)
 {
 	int err;
@@ -193,6 +287,10 @@ static int gpio_event_probe(struct platform_device *pdev)
 		registered++;
 	}
 
+#ifdef CONFIG_HTC_DEVICE
+	err = device_create_file(&(pdev->dev), &dev_attr_fm_radio);
+#endif
+
 	return 0;
 
 err_input_register_device_failed:
@@ -230,6 +328,11 @@ static int gpio_event_remove(struct platform_device *pdev)
 	}
 	for (i = 0; i < ip->input_devs->count; i++)
 		input_unregister_device(ip->input_devs->dev[i]);
+
+#ifdef CONFIG_HTC_DEVICE
+	device_remove_file(&(pdev->dev), &dev_attr_fm_radio);
+#endif
+
 	kfree(ip);
 	return 0;
 }
@@ -240,6 +343,10 @@ static struct platform_driver gpio_event_driver = {
 	.driver		= {
 		.name	= GPIO_EVENT_DEV_NAME,
 	},
+#if defined(CONFIG_HTC_DEVICE) && defined(CONFIG_PM)
+	.suspend	= gpio_event_sleep,
+	.resume		= gpio_event_wakeup,
+#endif
 };
 
 static int __devinit gpio_event_init(void)

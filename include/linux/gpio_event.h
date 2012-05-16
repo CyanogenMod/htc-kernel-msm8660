@@ -88,6 +88,9 @@ struct gpio_event_matrix_info {
 	struct timespec debounce_delay;
 	struct timespec poll_time;
 	unsigned flags;
+#ifdef CONFIG_HTC_DEVICE
+	unsigned int detect_phone_status;
+#endif
 };
 
 /* Directly connected inputs and outputs */
@@ -105,6 +108,10 @@ struct gpio_event_direct_entry {
 	uint32_t gpio:16;
 	uint32_t code:10;
 	uint32_t dev:6;
+#ifdef CONFIG_HTC_DEVICE
+	bool     check_call_status;
+	bool     not_wakeup_src;
+#endif
 };
 
 /* inputs */
@@ -167,4 +174,8 @@ uint16_t gpio_axis_4bit_gray_map(
 uint16_t gpio_axis_5bit_singletrack_map(
 			struct gpio_event_axis_info *info, uint16_t in);
 
+#ifdef CONFIG_HTC_DEVICE
+int gpio_event_get_phone_call_status(void);
+int gpio_event_get_fm_radio_status(void);
+#endif
 #endif
