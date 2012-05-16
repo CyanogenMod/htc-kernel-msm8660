@@ -34,6 +34,8 @@
 #include "board-shooter-audio-data.h"
 #include <mach/qdsp6v2_1x/audio_dev_ctl.h>
 
+#include <mach/board-msm8660.h>
+
 static struct mutex bt_sco_lock;
 static struct mutex mic_lock;
 static int curr_rx_mode;
@@ -45,10 +47,6 @@ static atomic_t q6_effect_mode = ATOMIC_INIT(-1);
 #define BIT_RECEIVER	(1 << 2)
 #define BIT_FM_SPK	(1 << 3)
 #define BIT_FM_HS	(1 << 4)
-
-#define PM8058_GPIO_BASE		NR_MSM_GPIOS
-#define PM8058_GPIO_PM_TO_SYS(pm_gpio)	(pm_gpio + PM8058_GPIO_BASE)
-#define PMGPIO(x)			(x-1)
 
 void shooter_snddev_bmic_pamp_on(int en);
 
