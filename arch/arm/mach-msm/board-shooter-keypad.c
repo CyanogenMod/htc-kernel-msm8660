@@ -39,17 +39,18 @@ static void shooter_gpio_event_input_init(void)
 				GPIO_CFG_2MA), GPIO_CFG_ENABLE);
 	gpio_tlmm_config(GPIO_CFG(SHOOTER_GPIO_KEY_CAM_STEP2, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP,
 				GPIO_CFG_2MA), GPIO_CFG_ENABLE);
-
-	enable_irq_wake(MSM_GPIO_TO_INT(SHOOTER_GPIO_KEY_VOL_UP));
-	enable_irq_wake(MSM_GPIO_TO_INT(SHOOTER_GPIO_KEY_VOL_DOWN));
-	enable_irq_wake(MSM_GPIO_TO_INT(SHOOTER_GPIO_KEY_POWER));
 };
 
 static struct gpio_event_input_info shooter_keypad_switch_info = {
 	.info.func = gpio_event_input_func,
 	.info.no_suspend = true,
-	.flags = 0,
+	.flags = GPIOEDF_PRINT_KEYS,
 	.type = EV_KEY,
+#if BITS_PER_LONG != 64 && !defined(CONFIG_KTIME_SCALAR)
+	.debounce_time.tv.nsec = 5 * NSEC_PER_MSEC,
+# else
+	.debounce_time.tv64 = 5 * NSEC_PER_MSEC,
+# endif
 	.keymap = shooter_keypad_switch_map,
 	.keymap_size = ARRAY_SIZE(shooter_keypad_switch_map)
 };
