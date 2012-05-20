@@ -157,6 +157,7 @@ struct mmc_platform_data {
 	/* HTC extension */
 	unsigned int *slot_type;
 	bool sdcc_v4_sup;
+	int emmc_dma_ch;
 };
 
 #endif

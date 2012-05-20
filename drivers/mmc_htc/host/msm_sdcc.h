@@ -209,13 +209,17 @@
 
 #define NR_SG		128
 
+#ifdef CONFIG_WIMAX
+#define MSM_MMC_WIMAX_IDLE_TIMEOUT	1000 /* msecs */
+#endif
+
 #define MSM_MMC_IDLE_TIMEOUT	250 /* msecs */
 #define MSM_EMMC_IDLE_TIMEOUT	20 /* msecs */
 /*
  * Set the request timeout to 10secs to allow
  * bad cards/controller to respond.
  */
-#define MSM_MMC_REQ_TIMEOUT	5000 /* msecs */
+#define MSM_MMC_REQ_TIMEOUT	10000 /* msecs */
 #define MSM_MMC_DISABLE_TIMEOUT        200 /* msecs */
 
 /*
@@ -405,18 +409,23 @@ struct msmsdcc_host {
 };
 
 int msmsdcc_set_pwrsave(struct mmc_host *mmc, int pwrsave);
-int msmsdcc_sdio_al_lpm(struct mmc_host *mmc, bool enable, int wlock_timeout);
+int msmsdcc_sdio_al_lpm(struct mmc_host *mmc, bool enable);
 
 #ifdef CONFIG_MSM_SDIO_AL
 
 static inline int msmsdcc_lpm_enable(struct mmc_host *mmc)
 {
-	return msmsdcc_sdio_al_lpm(mmc, true, 1);
+	return msmsdcc_sdio_al_lpm(mmc, true);
 }
 
 static inline int msmsdcc_lpm_disable(struct mmc_host *mmc)
 {
-	return msmsdcc_sdio_al_lpm(mmc, false, 1);
+	struct msmsdcc_host *host = mmc_priv(mmc);
+	int ret;
+
+	ret = msmsdcc_sdio_al_lpm(mmc, false);
+	wake_unlock(&host->sdio_wlock);
+	return ret;
 }
 #endif
 
@@ -426,15 +435,11 @@ extern void mmc_wimax_enable_host_wakeup(int on);
 extern int mmc_wimax_get_irq_log(void);
 #endif
 
-#ifdef CONFIG_MACH_PRIMODD
+
 //HTC_WIFI_START
-int primodd_wifi_power(int on); 
-//HTC_WIFI_END
-#endif
-#ifdef CONFIG_MACH_RUBY
-extern int ruby_wifi_power(int on);
-#endif
-#if defined CONFIG_MACH_BLISS || defined CONFIG_MACH_BLISSC || defined CONFIG_MACH_PRIMODS
+#ifdef CONFIG_TIWLAN_POWER_CONTROL_FUNC
 extern int ti_wifi_power(int on);
 #endif
+//HTC_WIFI_END
+
 #endif

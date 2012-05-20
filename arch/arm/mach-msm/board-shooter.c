@@ -3095,6 +3095,7 @@ static struct msm_sdcc_gpio sdc1_gpio_cfg[] = {
 	{168, "sdc1_cmd"}
 };
 
+#ifdef CONFIG_HTC_MMC
 static uint32_t sdc1_on_gpio_table[] = {
 	GPIO_CFG(159, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA), /* DAT0 */
 	GPIO_CFG(160, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA), /* DAT1 */
@@ -3116,12 +3117,13 @@ static void config_gpio_table(uint32_t *table, int len)
 	for (n = 0; n < len; n++) {
 		rc = gpio_tlmm_config(table[n], GPIO_CFG_ENABLE);
 		if (rc) {
-			pr_err("[CAM] %s: gpio_tlmm_config(%#x)=%d\n",
+			pr_err("[MMC] %s: gpio_tlmm_config(%#x)=%d\n",
 				__func__, table[n], rc);
 			break;
 		}
 	}
 }
+#endif
 #endif
 
 #ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
@@ -3587,9 +3589,9 @@ static int msm_sdcc_setup_vreg(int dev_id, unsigned char enable)
 
 	curr = &sdcc_vreg_data[dev_id - 1];
 	curr_vdd_reg = curr->vdd_data;
-/* derp with htc mmc
+#ifndef CONFIG_HTC_MMC
 	curr_vccq_reg = curr->vccq_data;
-*/
+#endif
 	curr_vddp_reg = curr->vddp_data;
 
 	/* check if regulators are initialized or not? */
@@ -3783,7 +3785,9 @@ static uint32_t msm_rpm_get_swfi_latency(void)
 static void __init msm8x60_init_mmc(void)
 {
 #ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
+#ifdef CONFIG_HTC_MMC
 	config_gpio_table(sdc1_on_gpio_table, ARRAY_SIZE(sdc1_on_gpio_table));
+#endif
 
 	/* SDCC1 : eMMC card connected */
 	sdcc_vreg_data[0].vdd_data = &sdcc_vdd_reg_data[0];

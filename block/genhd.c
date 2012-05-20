@@ -628,6 +628,7 @@ void add_disk(struct gendisk *disk)
 }
 EXPORT_SYMBOL(add_disk);
 
+#ifdef CONFIG_HTC_MMC
 /*
  * Duplicate from block/genhd.c del_gendisk(), but disable
  * fsync_bdev().
@@ -673,6 +674,7 @@ void del_gendisk_async(struct gendisk *disk)
 	device_del(disk_to_dev(disk));
 }
 EXPORT_SYMBOL(del_gendisk_async);
+#endif
 
 void del_gendisk(struct gendisk *disk)
 {

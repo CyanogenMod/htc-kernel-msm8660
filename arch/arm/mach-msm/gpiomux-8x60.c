@@ -1143,6 +1143,7 @@ static struct msm_gpiomux_config msm8x60_charm_sdc_configs[] __initdata = {
 	},
 };
 
+#ifdef CONFIG_HTC_MMC
 static struct msm_gpiomux_config htc8x60_sdc_configs[] __initdata = {
 	/* SDCC1 data[0] */
 	{
@@ -1225,6 +1226,7 @@ static struct msm_gpiomux_config htc8x60_sdc_configs[] __initdata = {
 		},
 	},
 };
+#endif
 
 static struct msm_gpiomux_config msm8x60_snd_configs[] __initdata = {
 	{
@@ -1731,7 +1733,11 @@ msm8x60_htc_gpiomux_cfgs[] __initdata = {
 	{msm8x60_isp_usb_configs, ARRAY_SIZE(msm8x60_isp_usb_configs)},
 #endif
 	{msm8x60_aux_pcm_configs, ARRAY_SIZE(msm8x60_aux_pcm_configs)},
+#ifdef CONFIG_HTC_MMC
 	{htc8x60_sdc_configs, ARRAY_SIZE(htc8x60_sdc_configs)},
+#else
+	{msm8x60_sdc_configs, ARRAY_SIZE(msm8x60_sdc_configs)},
+#endif
 	{msm8x60_snd_configs, ARRAY_SIZE(msm8x60_snd_configs)},
 	{msm8x60_lcdc_configs, ARRAY_SIZE(msm8x60_lcdc_configs)},
 	{msm8x60_mdp_vsync_configs, ARRAY_SIZE(msm8x60_mdp_vsync_configs)},
