@@ -39,6 +39,7 @@
 #include <asm/mach-types.h>
 
 #include <mach/board.h>
+#include <mach/board_htc.h>
 #include <mach/msm_hsusb.h>
 #include <linux/device.h>
 #include <mach/msm_hsusb_hw.h>
