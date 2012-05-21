@@ -22,7 +22,6 @@
 #include <linux/usb/otg.h>
 #include <linux/wakelock.h>
 #include <linux/pm_qos_params.h>
-#include <mach/board_htc.h>
 
 /**
  * Supported USB modes
@@ -169,11 +168,7 @@ enum usb_bam_pipe_dir {
  */
 struct msm_otg_platform_data {
 	int *phy_init_seq;
-#ifndef CONFIG_HTC_DEVICE
 	int (*vbus_power)(bool on);
-#else
-	void (*vbus_power)(bool on);
-#endif
 	unsigned power_budget;
 	enum usb_mode_type mode;
 	enum otg_control_type otg_control;
@@ -186,11 +181,6 @@ struct msm_otg_platform_data {
 	u32 swfi_latency;
 	bool enable_dcd;
 	struct msm_bus_scale_pdata *bus_scale_table;
-
-	/* HTC Extension */
-	char *ldo_3v3_name;
-	char *ldo_1v8_name;
-	char *vddcx_name;
 };
 
 /**
@@ -279,11 +269,6 @@ struct msm_otg {
 #define PHY_OTG_COMP_DISABLED		BIT(2)
 	struct pm_qos_request_list pm_qos_req_dma;
 	int reset_counter;
-
-	/* HTC Extension */
-	struct work_struct notifier_work;
-	enum usb_connect_type connect_type;
-	struct workqueue_struct *usb_wq;
 };
 
 struct msm_hsic_host_platform_data {

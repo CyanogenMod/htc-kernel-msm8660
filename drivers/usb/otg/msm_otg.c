@@ -68,42 +68,6 @@ static struct msm_otg *the_msm_otg;
 static bool debug_aca_enabled;
 static bool debug_bus_voting_enabled;
 
-#ifdef CONFIG_HTC_DEVICE
-static DEFINE_MUTEX(notify_sem);
-static void send_usb_connect_notify(struct work_struct *w)
-{
-	static struct t_usb_status_notifier *notifier;
-	struct msm_otg *motg = container_of(w, struct msm_otg, notifier_work);
-	if (!motg)
-		return;
-
-	dev_info(motg->otg.dev, "send connect type %d\n", motg->connect_type);
-	mutex_lock(&notify_sem);
-	list_for_each_entry(notifier, &g_lh_usb_notifier_list, notifier_link) {
-		if (notifier->func != NULL) {
-			/* Notify other drivers about connect type. */
-			/* Use slow charging for unknown type */
-			if (motg->connect_type == CONNECT_TYPE_UNKNOWN)
-				notifier->func(CONNECT_TYPE_USB);
-			else
-				notifier->func(motg->connect_type);
-		}
-	}
-	mutex_unlock(&notify_sem);
-}
-
-int usb_register_notifier(struct t_usb_status_notifier *notifier)
-{
-	if (!notifier || !notifier->name || !notifier->func)
-		return -EINVAL;
-
-	mutex_lock(&notify_sem);
-	list_add(&notifier->notifier_link, &g_lh_usb_notifier_list);
-	mutex_unlock(&notify_sem);
-	return 0;
-}
-#endif
-
 /* Prevent idle power collapse(pc) while operating in peripheral mode */
 static void otg_pm_qos_update_latency(struct msm_otg *dev, int vote)
 {
@@ -143,12 +107,7 @@ static int msm_hsusb_init_vddcx(struct msm_otg *motg, int init)
 	int ret = 0;
 
 	if (init) {
-#ifndef CONFIG_HTC_DEVICE
 		hsusb_vddcx = regulator_get(motg->otg.dev, "HSUSB_VDDCX");
-#else
-		/* TODO: null check vddcx_name */
-		hsusb_vddcx = regulator_get(motg->otg.dev, motg->pdata->vddcx_name);
-#endif
 		if (IS_ERR(hsusb_vddcx)) {
 			dev_err(motg->otg.dev, "unable to get hsusb vddcx\n");
 			return PTR_ERR(hsusb_vddcx);
@@ -200,12 +159,7 @@ static int msm_hsusb_ldo_init(struct msm_otg *motg, int init)
 	int rc = 0;
 
 	if (init) {
-#ifndef CONFIG_HTC_DEVICE
 		hsusb_3p3 = regulator_get(motg->otg.dev, "HSUSB_3p3");
-#else
-		/* TODO: null check ldo_3v3_name */
-		hsusb_3p3 = regulator_get(motg->otg.dev, motg->pdata->ldo_3v3_name);
-#endif
 		if (IS_ERR(hsusb_3p3)) {
 			dev_err(motg->otg.dev, "unable to get hsusb 3p3\n");
 			return PTR_ERR(hsusb_3p3);
@@ -218,12 +172,7 @@ static int msm_hsusb_ldo_init(struct msm_otg *motg, int init)
 					"hsusb 3p3\n");
 			goto put_3p3;
 		}
-#ifndef CONFIG_HTC_DEVICE
 		hsusb_1p8 = regulator_get(motg->otg.dev, "HSUSB_1p8");
-#else
-		/* TODO: null check ldo_1v8_name */
-		hsusb_1p8 = regulator_get(motg->otg.dev, motg->pdata->ldo_1v8_name);
-#endif
 		if (IS_ERR(hsusb_1p8)) {
 			dev_err(motg->otg.dev, "unable to get hsusb 1p8\n");
 			rc = PTR_ERR(hsusb_1p8);
@@ -1056,17 +1005,12 @@ static void msm_hsusb_vbus_power(struct msm_otg *motg, bool on)
 	if (vbus_is_on == on)
 		return;
 
-#ifndef CONFIG_HTC_DEVICE
 	if (motg->pdata->vbus_power) {
 		ret = motg->pdata->vbus_power(on);
 		if (!ret)
 			vbus_is_on = on;
 		return;
 	}
-#else
-	if (motg->pdata->vbus_power)
-		motg->pdata->vbus_power(on);
-#endif
 
 	if (!vbus_otg) {
 		pr_err("vbus_otg is NULL.");
@@ -1740,9 +1684,6 @@ static void msm_chg_detect_work(struct work_struct *w)
 			}
 			motg->chg_type = USB_SDP_CHARGER;
 			motg->chg_state = USB_CHG_STATE_DETECTED;
-#ifdef CONFIG_HTC_DEVICE
-			motg->connect_type = CONNECT_TYPE_UNKNOWN;
-#endif
 			delay = 0;
 		}
 		break;
@@ -1752,9 +1693,6 @@ static void msm_chg_detect_work(struct work_struct *w)
 			motg->chg_type = USB_DCP_CHARGER;
 		else
 			motg->chg_type = USB_CDP_CHARGER;
-#ifdef CONFIG_HTC_DEVICE
-		motg->connect_type = CONNECT_TYPE_AC;
-#endif
 		motg->chg_state = USB_CHG_STATE_SECONDARY_DONE;
 		/* fall through */
 	case USB_CHG_STATE_SECONDARY_DONE:
@@ -1766,9 +1704,6 @@ static void msm_chg_detect_work(struct work_struct *w)
 		dev_dbg(otg->dev, "chg_type = %s\n",
 			chg_to_string(motg->chg_type));
 		schedule_work(&motg->sm_work);
-#ifdef CONFIG_HTC_DEVICE
-		queue_work(motg->usb_wq, &motg->notifier_work);
-#endif
 		return;
 	default:
 		return;
@@ -1943,12 +1878,6 @@ static void msm_otg_sm_work(struct work_struct *w)
 			motg->chg_state = USB_CHG_STATE_UNDEFINED;
 			motg->chg_type = USB_INVALID_CHARGER;
 			msm_otg_reset(otg);
-#ifdef CONFIG_HTC_DEVICE
-			if (motg->connect_type != CONNECT_TYPE_NONE) {
-				motg->connect_type = CONNECT_TYPE_NONE;
-				queue_work(motg->usb_wq, &motg->notifier_work);
-			}
-#endif
 			pm_runtime_put_noidle(otg->dev);
 			pm_runtime_suspend(otg->dev);
 		}
@@ -1961,12 +1890,6 @@ static void msm_otg_sm_work(struct work_struct *w)
 			msm_otg_start_peripheral(otg, 0);
 			otg->state = OTG_STATE_B_IDLE;
 			schedule_work(w);
-#ifdef CONFIG_HTC_DEVICE
-			if (motg->connect_type != CONNECT_TYPE_NONE) {
-				motg->connect_type = CONNECT_TYPE_NONE;
-				queue_work(motg->usb_wq, &motg->notifier_work);
-			}
-#endif
 		} else if (test_bit(ID_C, &motg->inputs)) {
 			msm_otg_notify_charger(motg, IDEV_ACA_CHG_MAX);
 		}
@@ -2693,19 +2616,8 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	/* Ensure that above STOREs are completed before enabling interrupts */
 	mb();
 
-#ifdef CONFIG_HTC_DEVICE
-	motg->usb_wq = create_singlethread_workqueue("msm_hsusb");
-	if (motg->usb_wq == 0) {
-		dev_err(motg->otg.dev, "fail to create workqueue\n");
-		goto free_ldo_init;
-	}
-#endif
-
 	wake_lock_init(&motg->wlock, WAKE_LOCK_SUSPEND, "msm_otg");
 	INIT_WORK(&motg->sm_work, msm_otg_sm_work);
-#ifdef CONFIG_HTC_DEVICE
-	INIT_WORK(&motg->notifier_work, send_usb_connect_notify);
-#endif
 	INIT_DELAYED_WORK(&motg->chg_work, msm_chg_detect_work);
 	setup_timer(&motg->id_timer, msm_otg_id_timer_func,
 				(unsigned long) motg);
