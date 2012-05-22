@@ -775,6 +775,9 @@ struct usb_gadget_driver {
 	int			(*setup)(struct usb_gadget *,
 					const struct usb_ctrlrequest *);
 	void			(*disconnect)(struct usb_gadget *);
+#ifdef CONFIG_HTC_DEVICE
+	void			(*mute_disconnect)(struct usb_gadget *);
+#endif
 	void			(*suspend)(struct usb_gadget *);
 	void			(*resume)(struct usb_gadget *);
 

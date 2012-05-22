@@ -456,46 +456,10 @@ static struct msm_otg_platform_data msm_otg_pdata;
 static struct regulator *ldo6_3p3;
 static struct regulator *ldo7_1p8;
 static struct regulator *vdd_cx;
-#define PMICID_INT		PM8058_GPIO_IRQ(PM8058_IRQ_BASE, 36)
-#define PMIC_ID_GPIO		36
 notify_vbus_state notify_vbus_state_func_ptr;
 static int usb_phy_susp_dig_vol = 750000;
-static int pmic_id_notif_supported;
 
 #ifdef CONFIG_USB_EHCI_MSM_72K
-#define USB_PMIC_ID_DET_DELAY	msecs_to_jiffies(100)
-struct delayed_work pmic_id_det;
-
-static int __init usb_id_pin_rework_setup(char *support)
-{
-	if (strncmp(support, "true", 4) == 0)
-		pmic_id_notif_supported = 1;
-
-	return 1;
-}
-__setup("usb_id_pin_rework=", usb_id_pin_rework_setup);
-
-static void pmic_id_detect(struct work_struct *w)
-{
-	int val = gpio_get_value_cansleep(PM8058_GPIO_PM_TO_SYS(36));
-	pr_debug("%s(): gpio_read_value = %d\n", __func__, val);
-
-	if (notify_vbus_state_func_ptr)
-		(*notify_vbus_state_func_ptr) (val);
-}
-
-static irqreturn_t pmic_id_on_irq(int irq, void *data)
-{
-	/*
-	 * Spurious interrupts are observed on pmic gpio line
-	 * even though there is no state change on USB ID. Schedule the
-	 * work to to allow debounce on gpio
-	 */
-	schedule_delayed_work(&pmic_id_det, USB_PMIC_ID_DET_DELAY);
-
-	return IRQ_HANDLED;
-}
-
 static int msm_hsusb_phy_id_setup_init(int init)
 {
 	unsigned ret;
@@ -523,67 +487,7 @@ static int msm_hsusb_phy_id_setup_init(int init)
 
 static int msm_hsusb_pmic_id_notif_init(void (*callback)(int online), int init)
 {
-	unsigned ret = -ENODEV;
-
-	struct pm_gpio pmic_id_cfg = {
-		.direction	= PM_GPIO_DIR_IN,
-		.pull		= PM_GPIO_PULL_UP_1P5,
-		.function	= PM_GPIO_FUNC_NORMAL,
-		.vin_sel	= 2,
-		.inv_int_pol	= 0,
-	};
-	struct pm_gpio pmic_id_uncfg = {
-		.direction	= PM_GPIO_DIR_IN,
-		.pull		= PM_GPIO_PULL_NO,
-		.function	= PM_GPIO_FUNC_NORMAL,
-		.vin_sel	= 2,
-		.inv_int_pol	= 0,
-	};
-	if (!callback)
-		return -EINVAL;
-
-	if (SOCINFO_VERSION_MAJOR(socinfo_get_version()) != 2) {
-		pr_debug("%s: USB_ID pin is not routed to PMIC"
-					"on V1 surf/ffa\n", __func__);
-		return -ENOTSUPP;
-	}
-
-	usb_phy_susp_dig_vol = 500000;
-
-	if (init) {
-		notify_vbus_state_func_ptr = callback;
-		INIT_DELAYED_WORK(&pmic_id_det, pmic_id_detect);
-		ret = pm8xxx_gpio_config(PM8058_GPIO_PM_TO_SYS(PMIC_ID_GPIO),
-							&pmic_id_cfg);
-		if (ret) {
-			pr_err("%s:return val of pm8xxx_gpio_config: %d\n",
-						__func__,  ret);
-			return ret;
-		}
-		ret = request_threaded_irq(PMICID_INT, NULL, pmic_id_on_irq,
-			(IRQF_TRIGGER_RISING|IRQF_TRIGGER_FALLING),
-						"msm_otg_id", NULL);
-		if (ret) {
-			pr_err("%s:pmic_usb_id interrupt registration failed",
-					__func__);
-			return ret;
-		}
-		msm_otg_pdata.pmic_id_irq = PMICID_INT;
-	} else {
-		usb_phy_susp_dig_vol = 750000;
-		free_irq(PMICID_INT, 0);
-		ret = pm8xxx_gpio_config(PM8058_GPIO_PM_TO_SYS(PMIC_ID_GPIO),
-							&pmic_id_uncfg);
-		if (ret) {
-			pr_err("%s: return val of pm8xxx_gpio_config: %d\n",
-						__func__,  ret);
-			return ret;
-		}
-		msm_otg_pdata.pmic_id_irq = 0;
-		cancel_delayed_work_sync(&pmic_id_det);
-		notify_vbus_state_func_ptr = NULL;
-	}
-	return 0;
+	return -ENOTSUPP;
 }
 #endif
 

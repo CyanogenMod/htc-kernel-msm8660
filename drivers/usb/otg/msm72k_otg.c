@@ -32,6 +32,12 @@
 #include <mach/clk.h>
 #include <mach/msm_xo.h>
 
+#ifdef CONFIG_HTC_DEVICE
+#include <mach/board_htc.h>
+#include <linux/usb/htc_info.h>
+#include <mach/cable_detect.h>
+#endif
+
 #define MSM_USB_BASE	(dev->regs)
 #define USB_LINK_RESET_TIMEOUT	(msecs_to_jiffies(10))
 #define DRIVER_NAME	"msm_otg"
@@ -47,24 +53,120 @@ static void msm_otg_set_id_state(int id)
 
 struct msm_otg *the_msm_otg;
 
+#ifdef CONFIG_HTC_DEVICE
+static int htc_otg_vbus, force_host_mode;
+static DEFINE_MUTEX(notify_sem);
+static DEFINE_MUTEX(smwork_sem);
+static void send_usb_connect_notify(struct work_struct *w)
+{
+	static struct t_usb_status_notifier *notifier;
+	struct msm_otg *motg = container_of(w, struct msm_otg,  notifier_work);
+	if (!motg)
+		return;
+
+	motg->connect_type_ready = 1;
+	USBH_INFO("send connect type %d\n", motg->connect_type);
+	mutex_lock(&notify_sem);
+#ifdef CONFIG_CABLE_DETECT_ACCESSORY
+        if (cable_get_accessory_type() == DOCK_STATE_DMB) {
+                motg->connect_type = CONNECT_TYPE_CLEAR;
+                USBH_INFO("current accessory is DMB, send  %d\n", motg->connect_type);
+        }
+#endif
+	list_for_each_entry(notifier, &g_lh_usb_notifier_list, notifier_link) {
+		if (notifier->func != NULL) {
+			/* Notify other drivers about connect type. */
+			/* use slow charging for unknown type*/
+			if (motg->connect_type == CONNECT_TYPE_UNKNOWN)
+				notifier->func(CONNECT_TYPE_USB);
+			else
+				notifier->func(motg->connect_type);
+		}
+	}
+	mutex_unlock(&notify_sem);
+}
+
+int usb_register_notifier(struct t_usb_status_notifier *notifier)
+{
+	if (!notifier || !notifier->name || !notifier->func)
+		return -EINVAL;
+
+	mutex_lock(&notify_sem);
+	list_add(&notifier->notifier_link,
+			&g_lh_usb_notifier_list);
+	mutex_unlock(&notify_sem);
+	return 0;
+}
+
+int usb_is_connect_type_ready(void)
+{
+	if (!the_msm_otg)
+		return 0;
+	return the_msm_otg->connect_type_ready;
+}
+EXPORT_SYMBOL(usb_is_connect_type_ready);
+
+int usb_get_connect_type(void)
+{
+	if (!the_msm_otg)
+		return 0;
+#ifdef CONFIG_MACH_VERDI_LTE
+	if (the_msm_otg->connect_type == CONNECT_TYPE_USB_9V_AC)
+		return CONNECT_TYPE_9V_AC;
+#endif
+	return the_msm_otg->connect_type;
+}
+EXPORT_SYMBOL(usb_get_connect_type);
+
+void msm_hsusb_vbus_notif_register(void (*vbus_notif)(int))
+{
+	struct msm_otg *motg = the_msm_otg;
+	if (motg) {
+		motg->vbus_notification_cb = vbus_notif;
+		USBH_INFO("%s: success\n", __func__);
+	}
+}
+#endif
+
 static int is_host(void)
 {
 	struct msm_otg *dev = the_msm_otg;
 
+#ifndef CONFIG_HTC_DEVICE
 	if (dev->pdata->otg_mode == OTG_ID)
 		return (OTGSC_ID & readl(USB_OTGSC)) ? 0 : 1;
 	else
 		return !test_bit(ID, &dev->inputs);
+#else
+	if (dev->pmic_id_notif_supp)
+		return dev->pmic_id_status ? 0 : 1;
+#ifdef CONFIG_USB_OTG_HOST
+	/*
+	 * actually it will not move here
+	 * because host status depends on pmic_id_status now
+	 */
+	else if (dev->pdata->otg_mode == OTG_ID)
+		return (OTGSC_ID & readl(USB_OTGSC)) ? 0 : 1;
+#endif
+	else
+		return (dev->otg.state >= OTG_STATE_A_IDLE);
+#endif
 }
 
 static int is_b_sess_vld(void)
 {
 	struct msm_otg *dev = the_msm_otg;
 
+#ifndef CONFIG_HTC_DEVICE
 	if (dev->pdata->otg_mode == OTG_ID)
 		return (OTGSC_BSV & readl(USB_OTGSC)) ? 1 : 0;
 	else
 		return test_bit(B_SESS_VLD, &dev->inputs);
+#else
+	USBH_INFO("%s: htc_otg_vbus:%d, otgsc_bsv:%d\n", __func__,
+		htc_otg_vbus, (OTGSC_BSV & readl(USB_OTGSC)) ? 1 : 0);
+	return htc_otg_vbus;
+#endif
 }
 
 static unsigned ulpi_read(struct msm_otg *dev, unsigned reg)
@@ -135,6 +237,53 @@ static int usb_ulpi_read(struct otg_transceiver *xceiv, u32 reg)
 
 	return ulpi_read(dev, reg);
 }
+
+#ifdef CONFIG_HTC_DEVICE
+ssize_t otg_show_usb_phy_setting(char *buf)
+{
+	struct msm_otg *motg = the_msm_otg;
+	unsigned length = 0;
+	int i;
+
+	for (i = 0; i <= 0x14; i++)
+		length += sprintf(buf + length, "0x%x = 0x%x\n",
+				i, ulpi_read(motg, i));
+
+	for (i = 0x30; i <= 0x37; i++)
+		length += sprintf(buf + length, "0x%x = 0x%x\n",
+				i, ulpi_read(motg, i));
+	return length;
+}
+
+ssize_t otg_store_usb_phy_setting(const char *buf, size_t count)
+{
+	struct msm_otg *motg = the_msm_otg;
+	char *token[10];
+	unsigned long reg;
+	unsigned long value;
+	int i;
+
+	USBH_INFO("%s\n", buf);
+	for (i = 0; i < 2; i++)
+		token[i] = strsep((char **)&buf, " ");
+
+	i = strict_strtoul(token[0], 16, (unsigned long *)&reg);
+	if (i < 0) {
+		USBH_ERR("%s: reg %d\n", __func__, i);
+		return 0;
+	}
+	i = strict_strtoul(token[1], 16, (unsigned long *)&value);
+	if (i < 0) {
+		USBH_ERR("%s: value %d\n", __func__, i);
+		return 0;
+	}
+	USBH_INFO("Set 0x%02lx = 0x%02lx\n", reg, value);
+
+	ulpi_write(motg, value, reg);
+
+	return count;
+}
+#endif
 
 #ifdef CONFIG_USB_EHCI_MSM_72K
 static void enable_idgnd(struct msm_otg *dev)
@@ -352,6 +501,35 @@ static const char *timer_string(int bit)
 	}
 }
 
+#ifdef CONFIG_HTC_DEVICE
+static const char *charger_string(enum chg_type type)
+{
+	switch (type) {
+	case USB_CHG_TYPE__SDP:		return "__SDP";
+	case USB_CHG_TYPE__CARKIT:	return "__CARKIT";
+	case USB_CHG_TYPE__WALLCHARGER:	return "__WALLCHARGER";
+	case USB_CHG_TYPE__INVALID:	return "__INVALID";
+	default:			return "UNDEFINED";
+	}
+}
+
+static const char *connect_to_string(enum usb_connect_type connect_type)
+{
+	switch (connect_type) {
+	case CONNECT_TYPE_CLEAR:	return "CONNECT_CLEAR";
+	case CONNECT_TYPE_UNKNOWN:	return "CONNECT_UNKNOWN";
+	case CONNECT_TYPE_NONE:		return "CONNECT_NONE";
+	case CONNECT_TYPE_USB:  	return "CONNECT_USB";
+	case CONNECT_TYPE_AC:  		return "CONNECT_AC";
+	case CONNECT_TYPE_9V_AC: 	return "CONNECT_9V_AC";
+	case CONNECT_TYPE_WIRELESS:	return "CONNECT_WIRELESS";
+	case CONNECT_TYPE_INTERNAL:	return "CONNECT_INTERNAL";
+	case CONNECT_TYPE_UNSUPPORTED:	return "CONNECT_UNSUPPORTED";
+	default:			return "CONNECT_INVALID";
+	}
+}
+#endif
+
 /* Prevent idle power collapse(pc) while operating in peripheral mode */
 static void otg_pm_qos_update_latency(struct msm_otg *dev, int vote)
 {
@@ -452,8 +630,10 @@ static int msm_otg_send_event(struct otg_transceiver *xceiv,
 	snprintf(module_name, 16, "MODULE=%s", DRIVER_NAME);
 	snprintf(udev_event, 128, "EVENT=%s", event_string(event));
 	ret = kobject_uevent_env(&xceiv->dev->kobj, KOBJ_CHANGE, envp);
+#ifdef CONFIG_HTC_DEVICE
 	if (ret < 0)
 		pr_info("uevent sending failed with ret = %d\n", ret);
+#endif
 	return ret;
 }
 
@@ -552,6 +732,99 @@ static int msm_otg_set_power(struct otg_transceiver *xceiv, unsigned mA)
 
 	return 0;
 }
+
+#ifdef CONFIG_HTC_DEVICE
+static void ac_detect_expired(unsigned long _data)
+{
+	u32 delay = 0;
+	struct msm_otg *dev = the_msm_otg;
+
+	USBH_INFO("%s: count = %d, connect_type = %d\n", __func__,
+			dev->ac_detect_count, dev->connect_type);
+
+	if (dev->connect_type == CONNECT_TYPE_USB || dev->ac_detect_count >= 3)
+		return;
+
+	/* detect shorted D+/D-, indicating AC power */
+	if ((readl(USB_PORTSC) & PORTSC_LS) != PORTSC_LS) {
+		/* Some carkit can't be recognized as AC mode.
+		 * Add SW solution here to notify battery driver should
+		 * work as AC charger when car mode activated.
+		 */
+#ifdef CONFIG_CABLE_DETECT_ACCESSORY
+		if (cable_get_accessory_type() == DOCK_STATE_CAR) {
+			USBH_INFO("car mode charger\n");
+			atomic_set(&dev->chg_type, USB_CHG_TYPE__WALLCHARGER);
+			dev->connect_type = CONNECT_TYPE_AC;
+			dev->ac_detect_count = 0;
+
+			queue_work(dev->wq, &dev->notifier_work);
+			queue_work(dev->wq, &dev->sm_work);
+			return;
+		}
+#endif
+		dev->ac_detect_count++;
+		if (dev->ac_detect_count == 1)
+			delay = 5 * HZ;
+		else if (dev->ac_detect_count == 2)
+			delay = 10 * HZ;
+
+		mod_timer(&dev->ac_detect_timer, jiffies + delay);
+	} else {
+		USBH_INFO("AC charger\n");
+		atomic_set(&dev->chg_type, USB_CHG_TYPE__WALLCHARGER);
+		dev->connect_type = CONNECT_TYPE_AC;
+		dev->ac_detect_count = 0;
+
+		queue_work(dev->wq, &dev->notifier_work);
+		queue_work(dev->wq, &dev->sm_work);
+	}
+}
+
+static void msm_otg_notify_charger_attached(int connect_type)
+{
+	struct msm_otg *motg = the_msm_otg;
+
+	USBH_INFO("chg_type: %s %s => %s\n",
+		charger_string(atomic_read(&motg->chg_type)),
+		connect_to_string(motg->connect_type),
+		connect_to_string(connect_type));
+
+	switch (connect_type) {
+	case CONNECT_TYPE_UNKNOWN:
+		if (atomic_read(&motg->chg_type) != USB_CHG_TYPE__SDP)
+			atomic_set(&motg->chg_type, USB_CHG_TYPE__SDP);
+		if (motg->connect_type != CONNECT_TYPE_USB) {
+			motg->connect_type = CONNECT_TYPE_UNKNOWN;
+			motg->ac_detect_count = 0;
+			mod_timer(&motg->ac_detect_timer, jiffies + (3 * HZ));
+		} else {
+			/* connect_type = USB, and got a UNKNOWN notify */
+			return;
+		}
+		break;
+	case CONNECT_TYPE_USB:
+		if (atomic_read(&motg->chg_type) != USB_CHG_TYPE__SDP)
+			atomic_set(&motg->chg_type, USB_CHG_TYPE__SDP);
+		motg->ac_detect_count = 0;
+		del_timer(&motg->ac_detect_timer);
+
+		if (motg->connect_type != CONNECT_TYPE_USB) {
+			motg->connect_type = CONNECT_TYPE_USB;
+		} else {
+			/* connect_type = USB, and got a USB notify */
+			return;
+		}
+		break;
+	case CONNECT_TYPE_AC:
+		if (atomic_read(&motg->chg_type) != USB_CHG_TYPE__WALLCHARGER)
+			atomic_set(&motg->chg_type, USB_CHG_TYPE__WALLCHARGER);
+		motg->connect_type = CONNECT_TYPE_AC;
+		break;
+	}
+	queue_work(motg->wq, &motg->notifier_work);
+}
+#endif
 
 static int msm_otg_set_clk(struct otg_transceiver *xceiv, int on)
 {
@@ -754,7 +1027,11 @@ static int msm_otg_suspend(struct msm_otg *dev)
 		}
 	}
 
+#ifndef CONFIG_HTC_DEVICE
 	writel(readl(USB_USBCMD) | ASYNC_INTR_CTRL | ULPI_STP_CTRL, USB_USBCMD);
+#else
+	writel(readl(USB_USBCMD) /*| ASYNC_INTR_CTRL*/ | ULPI_STP_CTRL, USB_USBCMD);
+#endif
 	/* Ensure that above operation is completed before turning off clocks */
 	mb();
 
@@ -841,7 +1118,9 @@ static int msm_otg_resume(struct msm_otg *dev)
 		clk_enable(dev->iface_clk);
 
 	temp = readl(USB_USBCMD);
+#ifndef CONFIG_HTC_DEVICE
 	temp &= ~ASYNC_INTR_CTRL;
+#endif
 	temp &= ~ULPI_STP_CTRL;
 	writel(temp, USB_USBCMD);
 
@@ -920,11 +1199,13 @@ phy_resumed:
 		set_bit(B_SESS_VLD, &dev->inputs);
 		queue_work(dev->wq, &dev->sm_work);
 	}
+#ifndef CONFIG_HTC_DEVICE
 	if (dev->pmic_id_notif_supp) {
 		dev->pdata->pmic_id_notif_init(&msm_otg_set_id_state, 0);
 		dev->pmic_id_notif_supp = 0;
 		enable_idgnd(dev);
 	}
+#endif
 
 	/* Enable Idabc interrupts as these were disabled before entering LPM */
 	enable_idabc(dev);
@@ -1049,12 +1330,14 @@ static int msm_otg_set_suspend(struct otg_transceiver *xceiv, int suspend)
 			}
 			udelay(10);
 		}
+#ifndef CONFIG_HTC_DEVICE
 		if (dev->pmic_id_notif_supp) {
 			dev->pdata->pmic_id_notif_init(
 				&msm_otg_set_id_state, 0);
 			dev->pmic_id_notif_supp = 0;
 			enable_idgnd(dev);
 		}
+#endif
 out:
 		enable_idabc(dev);
 		enable_irq(dev->irq);
@@ -1179,19 +1462,34 @@ static int msm_otg_set_host(struct otg_transceiver *xceiv, struct usb_bus *host)
 	return 0;
 }
 
+#ifndef CONFIG_HTC_DEVICE
 static void msm_otg_set_id_state(int id)
+#else
+void msm_otg_set_id_state(int id)
+#endif
 {
 	struct msm_otg *dev = the_msm_otg;
 	unsigned long flags;
 
+#ifndef CONFIG_HTC_DEVICE
 	if (!atomic_read(&dev->in_lpm))
 		return;
+#else
+	if (!dev) {
+		USBH_INFO("OTG does not probe yet\n");
+		return;
+	}
+
+	dev->pmic_id_status = id;
+#endif
 
 	if (id) {
 		set_bit(ID, &dev->inputs);
 	} else {
 		clear_bit(ID, &dev->inputs);
+#ifndef CONFIG_HTC_DEVICE
 		set_bit(A_BUS_REQ, &dev->inputs);
+#endif
 	}
 	spin_lock_irqsave(&dev->lock, flags);
 	if (dev->otg.state != OTG_STATE_UNDEFINED) {
@@ -1202,10 +1500,29 @@ static void msm_otg_set_id_state(int id)
 }
 #endif
 
+#ifdef CONFIG_HTC_DEVICE
+int msm_otg_get_vbus_state(void)
+{
+	return htc_otg_vbus;
+}
+#endif
+
 void msm_otg_set_vbus_state(int online)
 {
 	struct msm_otg *dev = the_msm_otg;
 
+#ifdef CONFIG_HTC_DEVICE
+	USBH_INFO("%s: %d\n", __func__, online);
+
+	htc_otg_vbus = online;
+	if (!dev) {
+		USBH_INFO("OTG does not probe yet\n");
+		return;
+	}
+        /* block vbus event if entering host mode manually */
+        if (force_host_mode)
+                return;
+#endif
 	/*
 	 * Process disconnect only for wallcharger
 	 * during fast plug-out plug-in at the
@@ -1275,6 +1592,7 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 		work = 1;
 	} else if (otgsc & OTGSC_BSVIS) {
 		writel(otgsc, USB_OTGSC);
+#ifndef CONFIG_HTC_DEVICE
 		/* BSV interrupt comes when operating as an A-device
 		 * (VBUS on/off).
 		 * But, handle BSV when charger is removed from ACA in ID_A
@@ -1290,6 +1608,26 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 			clear_bit(B_SESS_VLD, &dev->inputs);
 		}
 		work = 1;
+#else
+		if (dev->vbus_notification_cb) {
+			/* BSV interrupt comes when operating as an A-device
+			 * (VBUS on/off).
+			 * But, handle BSV when charger is removed from ACA in ID_A
+			 */
+			if ((state >= OTG_STATE_A_IDLE) &&
+				!test_bit(ID_A, &dev->inputs))
+				goto out;
+			if (otgsc & OTGSC_BSV) {
+				pr_debug("BSV set\n");
+				dev->vbus_notification_cb(1);
+				/* set_bit(B_SESS_VLD, &dev->inputs); */
+			} else {
+				pr_debug("BSV clear\n");
+				dev->vbus_notification_cb(0);
+				/* clear_bit(B_SESS_VLD, &dev->inputs); */
+			}
+		}
+#endif
 	} else if (otgsc & OTGSC_DPIS) {
 		pr_debug("DPIS detected\n");
 		writel(otgsc, USB_OTGSC);
@@ -1326,6 +1664,17 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 				clear_bit(A_CONN, &dev->inputs);
 			}
 			break;
+#ifdef CONFIG_HTC_DEVICE
+		case OTG_STATE_B_IDLE:
+		case OTG_STATE_A_IDLE:
+		case OTG_STATE_A_WAIT_VRISE:
+		case OTG_STATE_A_WAIT_VFALL:
+			/* suppress the unknown interrupt */
+			USBH_WARNING("%s: nobody handles IRQ\n", __func__);
+			writel(sts, USB_USBSTS);
+			work = 0;
+			break;
+#endif
 		default:
 			work = 0;
 			break;
@@ -1560,6 +1909,11 @@ static void otg_reset(struct otg_transceiver *xceiv, int phy_reset)
 	else
 		msm_otg_phy_reset(dev);
 
+#ifdef CONFIG_HTC_DEVICE
+	/* REVISIT: suppress id signal from phy */
+	if (readl(USB_OTGSC) & OTGSC_IDPU)
+		writel(readl(USB_OTGSC) & ~OTGSC_IDPU, USB_OTGSC);
+#endif
 	/*disable all phy interrupts*/
 	ulpi_write(dev, 0xFF, 0x0F);
 	ulpi_write(dev, 0xFF, 0x12);
@@ -1605,8 +1959,12 @@ reset_link:
 		mode = USBMODE_SDIS | USBMODE_HOST;
 	writel(mode, USB_USBMODE);
 
+#ifndef CONFIG_HTC_DEVICE
 	writel_relaxed((readl_relaxed(USB_OTGSC) | OTGSC_IDPU), USB_OTGSC);
 	if (dev->otg.gadget) {
+#else
+	if (dev->otg.gadget && dev->vbus_notification_cb) {
+#endif
 		enable_sess_valid(dev);
 		/* Due to the above 100ms delay, interrupts from PHY are
 		 * sometimes missed during fast plug-in/plug-out of cable.
@@ -1645,6 +2003,15 @@ reset_link:
 
 	enable_idabc(dev);
 
+#ifdef CONFIG_HTC_DEVICE
+	/*
+	 * REVISIT: IDPU should be 0 here
+	 * suppress id signal from phy
+	 */
+	if (readl(USB_OTGSC) & OTGSC_IDPU)
+		writel(readl(USB_OTGSC) & ~OTGSC_IDPU, USB_OTGSC);
+#endif
+
 	if (work) {
 		wake_lock(&dev->wlock);
 		queue_work(dev->wq, &dev->sm_work);
@@ -1667,6 +2034,11 @@ static void msm_otg_sm_work(struct work_struct *w)
 	state = dev->otg.state;
 	spin_unlock_irqrestore(&dev->lock, flags);
 
+#ifdef CONFIG_HTC_DEVICE
+	USBH_INFO("%s: state:%s bit:0x%08x\n", __func__, state_string(state),
+			(unsigned) dev->inputs);
+	mutex_lock(&smwork_sem);
+#endif
 	switch (state) {
 	case OTG_STATE_UNDEFINED:
 
@@ -1701,8 +2073,16 @@ static void msm_otg_sm_work(struct work_struct *w)
 			if (!dev->otg.host || !is_host())
 				set_bit(ID, &dev->inputs);
 
+#ifndef CONFIG_HTC_DEVICE
 			if (dev->otg.gadget && is_b_sess_vld())
 				set_bit(B_SESS_VLD, &dev->inputs);
+#else
+			if (dev->otg.gadget && is_b_sess_vld()) {
+				set_bit(B_SESS_VLD, &dev->inputs);
+				if (dev->pdata->usb_uart_switch)
+					dev->pdata->usb_uart_switch(0);
+			}
+#endif
 		}
 		spin_lock_irqsave(&dev->lock, flags);
 		if ((test_bit(ID, &dev->inputs)) &&
@@ -1723,6 +2103,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 			pr_debug("!id || id_A\n");
 			clear_bit(B_BUS_REQ, &dev->inputs);
 			otg_reset(&dev->otg, 0);
+#ifdef CONFIG_HTC_DEVICE
+			set_bit(A_BUS_REQ, &dev->inputs);
+#endif
 
 			spin_lock_irqsave(&dev->lock, flags);
 			dev->otg.state = OTG_STATE_A_IDLE;
@@ -1802,6 +2185,14 @@ static void msm_otg_sm_work(struct work_struct *w)
 			msm_otg_start_peripheral(&dev->otg, 0);
 			dev->b_last_se0_sess = jiffies;
 
+#ifdef CONFIG_HTC_DEVICE
+			if (dev->connect_type != CONNECT_TYPE_NONE) {
+				dev->connect_type = CONNECT_TYPE_NONE;
+				queue_work(dev->wq, &dev->notifier_work);
+			}
+			dev->ac_detect_count = 0;
+			del_timer(&dev->ac_detect_timer);
+#endif
 			/* Workaround: Reset phy after session */
 			otg_reset(&dev->otg, 1);
 			work = 1;
@@ -2265,6 +2656,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 	default:
 		pr_err("invalid OTG state\n");
 	}
+#ifdef CONFIG_HTC_DEVICE
+	mutex_unlock(&smwork_sem);
+#endif
 
 	if (work)
 		queue_work(dev->wq, &dev->sm_work);
@@ -2705,8 +3099,17 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	msm_otg_init_timer(dev);
 	INIT_WORK(&dev->sm_work, msm_otg_sm_work);
 	INIT_WORK(&dev->otg_resume_work, msm_otg_resume_w);
+#ifdef CONFIG_HTC_DEVICE
+	INIT_WORK(&dev->notifier_work, send_usb_connect_notify);
+#endif
 	spin_lock_init(&dev->lock);
 	wake_lock_init(&dev->wlock, WAKE_LOCK_SUSPEND, "msm_otg");
+
+#ifdef CONFIG_HTC_DEVICE
+	dev->ac_detect_count = 0;
+	dev->ac_detect_timer.function = ac_detect_expired;
+	init_timer(&dev->ac_detect_timer);
+#endif
 
 	dev->wq = alloc_workqueue("k_otg", WQ_NON_REENTRANT, 0);
 	if (!dev->wq) {
@@ -2746,6 +3149,43 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 			goto free_pmic_vbus_notif;
 		}
 	}
+
+#ifdef CONFIG_HTC_DEVICE
+	if (dev->pdata->pmic_id_notif_init) {
+		ret = dev->pdata->pmic_id_notif_init(&msm_otg_set_id_state, 1);
+		if (!ret) {
+			dev->pmic_id_notif_supp = 1;
+			/*
+			 * As a part of usb initialization checks the id
+			 * by that time if pmic doesn't generate ID interrupt,
+			 * then it assumes that micro-A cable is connected
+			 * (as default pmic_id_status is 0, which indicates
+			 * as micro-A cable) and moving to Host mode and
+			 * ignoring the BSession Valid interrupts.
+			 * For now assigning default id_status as 1
+			 * (which indicates as micro-B)
+			 */
+			dev->pmic_id_status = 1;
+		} else if (ret != -ENOTSUPP) {
+			USBH_ERR("%s: pmic_id_ notif_init failed err:%d",
+					__func__, ret);
+			goto free_pmic_vbus_notif;
+		}
+	}
+#if defined(CONFIG_USB_OTG_HOST)
+	else {
+		/*
+		 * 8x60 devices do not internal pull up id in phy
+		 *  to not interfere adc value, so we cannot rely
+		 *  on id interrupt on phy but based on callback
+		 *  notifier from cable_detect.c
+		 */
+		dev->pmic_id_notif_supp = 1;
+		dev->pmic_id_status = 1;
+		force_host_mode = 0;
+	}
+#endif
+#endif
 
 	if (dev->pdata->pmic_vbus_irq)
 		dev->vbus_on_irq = dev->pdata->pmic_vbus_irq;
@@ -2801,6 +3241,9 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	dev->otg.start_hnp = msm_otg_start_hnp;
 	dev->otg.send_event = msm_otg_send_event;
 	dev->otg.set_power = msm_otg_set_power;
+#ifdef CONFIG_HTC_DEVICE
+	dev->otg.notify_charger = msm_otg_notify_charger_attached;
+#endif
 	dev->set_clk = msm_otg_set_clk;
 	dev->reset = otg_reset;
 	dev->otg.io_ops = &msm_otg_io_ops;

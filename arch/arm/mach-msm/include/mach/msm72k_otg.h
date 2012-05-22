@@ -22,6 +22,9 @@
 
 #include <asm/mach-types.h>
 #include <mach/msm_hsusb.h>
+#ifdef CONFIG_HTC_DEVICE
+#include <mach/board_htc.h>
+#endif
 
 #define OTGSC_BSVIE            (1 << 27)
 #define OTGSC_IDIE             (1 << 24)
@@ -146,6 +149,9 @@ struct msm_otg {
 	struct wake_lock wlock;
 	unsigned long b_last_se0_sess; /* SRP initial condition check */
 	unsigned long inputs;
+#ifdef CONFIG_HTC_DEVICE
+	int pmic_id_status;
+#endif
 	unsigned long tmouts;
 	u8 active_tmout;
 	struct hrtimer timer;
@@ -157,6 +163,15 @@ struct msm_otg {
 #ifdef CONFIG_USB_MSM_ACA
 	struct timer_list	id_timer;	/* drives id_status polling */
 	unsigned		b_max_power;	/* ACA: max power of accessory*/
+#endif
+
+#ifdef CONFIG_HTC_DEVICE
+	void (*vbus_notification_cb)(int online);
+	struct work_struct notifier_work;
+	enum usb_connect_type connect_type;
+	int connect_type_ready;
+	struct timer_list ac_detect_timer;
+	int ac_detect_count;
 #endif
 };
 

@@ -124,6 +124,9 @@ struct msm_hsusb_gadget_platform_data {
 };
 
 struct msm_otg_platform_data {
+#ifdef CONFIG_HTC_DEVICE
+	int *phy_init_seq;
+#endif
 	int (*rpc_connect)(int);
 	int (*phy_reset)(void __iomem *);
 	int pmic_vbus_irq;
@@ -172,6 +175,10 @@ struct msm_otg_platform_data {
 	int  (*chg_init)(int init);
 	int (*config_vddcx)(int high);
 	int (*init_vddcx)(int init);
+
+#ifdef CONFIG_HTC_DEVICE
+	void (*usb_uart_switch)(int);
+#endif
 
 	struct pm_qos_request_list pm_qos_req_dma;
 };

@@ -38,7 +38,9 @@
 
 #include <asm/mach-types.h>
 
+#ifndef CONFIG_HTC_DEVICE
 #include <mach/board.h>
+#endif
 #include <mach/board_htc.h>
 #include <mach/msm_hsusb.h>
 #include <linux/device.h>
@@ -46,6 +48,11 @@
 #include <mach/clk.h>
 #include <linux/uaccess.h>
 #include <linux/wakelock.h>
+
+#ifdef CONFIG_HTC_DEVICE
+#include <linux/usb/htc_info.h>
+#include <mach/htc_battery_common.h>
+#endif
 
 static const char driver_name[] = "msm72k_udc";
 
@@ -235,6 +242,7 @@ static void flush_endpoint(struct msm_endpoint *ept);
 static void usb_reset(struct usb_info *ui);
 static int usb_ept_set_halt(struct usb_ep *_ep, int value);
 
+#ifndef CONFIG_HTC_DEVICE
 static DEFINE_MUTEX(notify_sem);
 int usb_register_notifier(struct t_usb_status_notifier *notifier)
 {
@@ -247,6 +255,7 @@ int usb_register_notifier(struct t_usb_status_notifier *notifier)
 	mutex_unlock(&notify_sem);
 	return 0;
 }
+#endif
 
 static void msm_hsusb_set_speed(struct usb_info *ui)
 {
@@ -342,6 +351,22 @@ static int usb_get_max_power(struct usb_info *ui)
 	return bmaxpow;
 }
 
+#ifdef CONFIG_HTC_DEVICE
+static void ulpi_init(struct usb_info *ui)
+{
+	int *seq = ui->pdata->phy_init_seq;
+
+	if (!seq)
+		return;
+
+	while (seq[0] >= 0) {
+		USB_INFO("ulpi: write 0x%02x to 0x%02x\n", seq[0], seq[1]);
+		otg_io_write(ui->xceiv, seq[0], seq[1]);
+		seq += 2;
+	}
+}
+#endif
+
 static int usb_phy_stuck_check(struct usb_info *ui)
 {
 	/*
@@ -415,6 +440,7 @@ static void usb_phy_status_check_timer(unsigned long data)
 
 static void usb_chg_stop(struct work_struct *w)
 {
+#ifndef CONFIG_HTC_DEVICE
 	struct usb_info *ui = container_of(w, struct usb_info, chg_stop.work);
 	struct msm_otg *otg = to_msm_otg(ui->xceiv);
 	enum chg_type temp;
@@ -423,6 +449,10 @@ static void usb_chg_stop(struct work_struct *w)
 
 	if (temp == USB_CHG_TYPE__SDP)
 		otg_set_power(ui->xceiv, 0);
+#else
+	USB_INFO("disable charger\n");
+	htc_battery_charger_disable();
+#endif
 }
 
 static void usb_chg_detect(struct work_struct *w)
@@ -446,6 +476,15 @@ static void usb_chg_detect(struct work_struct *w)
 	maxpower = usb_get_max_power(ui);
 	if (maxpower > 0)
 		otg_set_power(ui->xceiv, maxpower);
+
+#ifdef CONFIG_HTC_DEVICE
+	if (ui->xceiv) {
+		if (atomic_read(&otg->chg_type) == USB_CHG_TYPE__WALLCHARGER)
+			ui->xceiv->notify_charger(CONNECT_TYPE_AC);
+		else if (atomic_read(&otg->chg_type) == USB_CHG_TYPE__SDP)
+			ui->xceiv->notify_charger(CONNECT_TYPE_UNKNOWN);
+	}
+#endif
 
 	/* USB driver prevents idle and suspend power collapse(pc)
 	 * while USB cable is connected. But when dedicated charger is
@@ -502,7 +541,9 @@ static void init_endpoints(struct usb_info *ui)
 
 static void config_ept(struct msm_endpoint *ept)
 {
+#ifndef CONFIG_HTC_DEVICE
 	struct usb_info *ui = ept->ui;
+#endif
 	unsigned cfg = CONFIG_MAX_PKT(ept->ep.maxpacket) | CONFIG_ZLT;
 
 	/* ep0 out needs interrupt-on-setup */
@@ -512,12 +553,14 @@ static void config_ept(struct msm_endpoint *ept)
 	ept->head->config = cfg;
 	ept->head->next = TERMINATE;
 
+#ifndef CONFIG_HTC_DEVICE
 	if (ept->ep.maxpacket)
 		dev_dbg(&ui->pdev->dev,
 			"ept #%d %s max:%d head:%p bit:%d\n",
 		       ept->num,
 		       (ept->flags & EPT_FLAG_IN) ? "in" : "out",
 		       ept->ep.maxpacket, ept->head, ept->bit);
+#endif
 }
 
 static void configure_endpoints(struct usb_info *ui)
@@ -950,10 +993,12 @@ static void handle_setup(struct usb_info *ui)
 	flush_endpoint(&ui->ep0out);
 	flush_endpoint(&ui->ep0in);
 
+#ifndef CONFIG_HTC_DEVICE
 	dev_dbg(&ui->pdev->dev,
 		"setup: type=%02x req=%02x val=%04x idx=%04x len=%04x\n",
 	       ctl.bRequestType, ctl.bRequest, ctl.wValue,
 	       ctl.wIndex, ctl.wLength);
+#endif
 
 	if ((ctl.bRequestType & (USB_DIR_IN | USB_TYPE_MASK)) ==
 					(USB_DIR_IN | USB_TYPE_STANDARD)) {
@@ -1074,6 +1119,10 @@ static void handle_setup(struct usb_info *ui)
 				case J_TEST:
 				case K_TEST:
 				case SE0_NAK_TEST:
+#ifdef CONFIG_HTC_DEVICE
+					if (!atomic_read(&ui->test_mode))
+						schedule_delayed_work(&ui->chg_stop, 0);
+#endif
 				case TST_PKT_TEST:
 					atomic_set(&ui->test_mode, ctl.wIndex);
 					goto ack;
@@ -1124,6 +1173,9 @@ static void handle_endpoint(struct usb_info *ui, unsigned bit)
 	struct msm_request *req;
 	unsigned long flags;
 	unsigned info;
+#ifdef CONFIG_HTC_DEVICE
+	int req_dequeue = 1;
+#endif
 
 	/*
 	INFO("handle_endpoint() %d %s req=%p(%08x)\n",
@@ -1142,12 +1194,30 @@ static void handle_endpoint(struct usb_info *ui, unsigned bit)
 			break;
 		}
 
+#ifdef CONFIG_HTC_DEVICE
+dequeue:
+#endif
 		/* clean speculative fetches on req->item->info */
 		dma_coherent_post_ops();
 		info = req->item->info;
 		/* if the transaction is still in-flight, stop here */
+#ifndef CONFIG_HTC_DEVICE
 		if (info & INFO_ACTIVE)
 			break;
+#else
+		if (info & INFO_ACTIVE) {
+			if (req_dequeue) {
+				req_dequeue = 0;
+				ui->dTD_update_fail_count++;
+				ept->dTD_update_fail_count++;
+				udelay(10);
+				goto dequeue;
+			} else {
+				break;
+			}
+		}
+		req_dequeue = 0;
+#endif
 
 		del_timer(&ept->prime_timer);
 		/* advance ept queue to the next request */
@@ -1163,8 +1233,12 @@ static void handle_endpoint(struct usb_info *ui, unsigned bit)
 			/* XXX pass on more specific error code */
 			req->req.status = -EIO;
 			req->req.actual = 0;
+#ifndef CONFIG_HTC_DEVICE
 			dev_err(&ui->pdev->dev,
 				"ept %d %s error. info=%08x\n",
+#else
+			USB_INFO("ept %d %s error. info=%08x\n",
+#endif
 			       ept->num,
 			       (ept->flags & EPT_FLAG_IN) ? "in" : "out",
 			       info);
@@ -1284,7 +1358,11 @@ static irqreturn_t usb_interrupt(int irq, void *data)
 	}
 
 	if (n & STS_URI) {
+#ifndef CONFIG_HTC_DEVICE
 		dev_dbg(&ui->pdev->dev, "reset\n");
+#else
+		USB_INFO("reset\n");
+#endif
 		spin_lock_irqsave(&ui->lock, flags);
 		ui->gadget.speed = USB_SPEED_UNKNOWN;
 		spin_unlock_irqrestore(&ui->lock, flags);
@@ -1300,8 +1378,10 @@ static irqreturn_t usb_interrupt(int irq, void *data)
 #endif
 		msm_hsusb_set_state(USB_STATE_DEFAULT);
 		atomic_set(&ui->remote_wakeup, 0);
+#ifndef CONFIG_HTC_DEVICE
 		if (!ui->gadget.is_a_peripheral)
 			schedule_delayed_work(&ui->chg_stop, 0);
+#endif
 
 		writel(readl(USB_ENDPTSETUPSTAT), USB_ENDPTSETUPSTAT);
 		writel(readl(USB_ENDPTCOMPLETE), USB_ENDPTCOMPLETE);
@@ -1322,7 +1402,11 @@ static irqreturn_t usb_interrupt(int irq, void *data)
 			 */
 			dev_dbg(&ui->pdev->dev,
 					"usb: notify offline\n");
+#ifndef CONFIG_HTC_DEVICE
 			ui->driver->disconnect(&ui->gadget);
+#else
+			ui->driver->mute_disconnect(&ui->gadget);
+#endif
 			/* cancel pending ep0 transactions */
 			flush_endpoint(&ui->ep0out);
 			flush_endpoint(&ui->ep0in);
@@ -1331,10 +1415,23 @@ static irqreturn_t usb_interrupt(int irq, void *data)
 		/* Start phy stuck timer */
 		if (ui->pdata && ui->pdata->is_phy_status_timer_on)
 			mod_timer(&phy_status_timer, PHY_STATUS_CHECK_DELAY);
+
+#ifdef CONFIG_HTC_DEVICE
+		if (ui->xceiv->notify_charger)
+			ui->xceiv->notify_charger(CONNECT_TYPE_USB);
+#endif
 	}
 
 	if (n & STS_SLI) {
+#ifndef CONFIG_HTC_DEVICE
 		dev_dbg(&ui->pdev->dev, "suspend\n");
+#else
+		USB_INFO("suspend\n");
+
+		/* We should not handle suspend after cable removed */
+		if (!is_usb_online(ui))
+			return IRQ_HANDLED;
+#endif
 
 		spin_lock_irqsave(&ui->lock, flags);
 		ui->usb_state = USB_STATE_SUSPENDED;
@@ -1418,6 +1515,10 @@ static void usb_reset(struct usb_info *ui)
 	writel((readl(USB_USBCMD) & ~USBCMD_ITC_MASK) | USBCMD_ITC(0),
 							USB_USBCMD);
 
+#ifdef CONFIG_HTC_DEVICE
+	ulpi_init(ui);
+#endif
+
 	writel(ui->dma, USB_ENDPOINTLISTADDR);
 
 	configure_endpoints(ui);
@@ -1427,7 +1528,11 @@ static void usb_reset(struct usb_info *ui)
 
 	if (ui->driver) {
 		dev_dbg(&ui->pdev->dev, "usb: notify offline\n");
+#ifndef CONFIG_HTC_DEVICE
 		ui->driver->disconnect(&ui->gadget);
+#else
+		ui->driver->mute_disconnect(&ui->gadget);
+#endif
 	}
 
 	/* cancel pending ep0 transactions */
@@ -1531,15 +1636,24 @@ static void usb_do_work(struct work_struct *w)
 				ui->state = USB_STATE_ONLINE;
 				usb_do_work_check_vbus(ui);
 
+#ifdef CONFIG_HTC_DEVICE
+				if (!ui->gadget.is_a_peripheral)
+					schedule_delayed_work(
+							&ui->chg_det,
+							USB_CHG_DET_DELAY);
+#endif
+
 				if (!atomic_read(&ui->softconnect))
 					break;
 
 				msm72k_pullup_internal(&ui->gadget, 1);
 
+#ifndef CONFIG_HTC_DEVICE
 				if (!ui->gadget.is_a_peripheral)
 					schedule_delayed_work(
 							&ui->chg_det,
 							USB_CHG_DET_DELAY);
+#endif
 
 			}
 			break;
@@ -1681,15 +1795,23 @@ static void usb_do_work(struct work_struct *w)
 				}
 				ui->irq = otg->irq;
 				enable_irq_wake(otg->irq);
+#ifdef CONFIG_HTC_DEVICE
+				if (!ui->gadget.is_a_peripheral)
+					schedule_delayed_work(
+							&ui->chg_det,
+							USB_CHG_DET_DELAY);
+#endif
 
 				if (!atomic_read(&ui->softconnect))
 					break;
 				msm72k_pullup_internal(&ui->gadget, 1);
 
+#ifndef CONFIG_HTC_DEVICE
 				if (!ui->gadget.is_a_peripheral)
 					schedule_delayed_work(
 							&ui->chg_det,
 							USB_CHG_DET_DELAY);
+#endif
 			}
 			break;
 		}
@@ -1918,6 +2040,10 @@ static ssize_t debug_reprime_ep(struct file *file, const char __user *ubuf,
 		i = ep_num + 16;
 	else
 		i = ep_num;
+
+#ifdef CONFIG_HTC_DEVICE
+	if (i >= 32) return 0;
+#endif
 
 	spin_lock_irqsave(&ui->lock, flags);
 	ept = ui->ept + i;
@@ -2284,6 +2410,14 @@ static int msm72k_pullup_internal(struct usb_gadget *_gadget, int is_active)
 		writel(readl(USB_USBCMD) & ~USBCMD_RS, USB_USBCMD);
 		/* S/W workaround, Issue#1 */
 		otg_io_write(ui->xceiv, 0x48, 0x04);
+#ifdef CONFIG_HTC_DEVICE
+		if (atomic_read(&ui->configured)) {
+			/* marking us offline will cause ept queue attempts
+			 ** to fail
+			 */
+			atomic_set(&ui->configured, 0);
+		}
+#endif
 	}
 
 	/* Ensure pull-up operation is completed before returning */
@@ -2309,8 +2443,10 @@ static int msm72k_pullup(struct usb_gadget *_gadget, int is_active)
 
 	msm72k_pullup_internal(_gadget, is_active);
 
+#ifndef CONFIG_HTC_DEVICE
 	if (is_active && !ui->gadget.is_a_peripheral)
 		schedule_delayed_work(&ui->chg_det, USB_CHG_DET_DELAY);
+#endif
 
 	return 0;
 }

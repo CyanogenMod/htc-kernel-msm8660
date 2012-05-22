@@ -1058,6 +1058,26 @@ static void composite_disconnect(struct usb_gadget *gadget)
 	spin_unlock_irqrestore(&cdev->lock, flags);
 }
 
+#ifdef CONFIG_HTC_DEVICE
+static void composite_mute_disconnect(struct usb_gadget *gadget)
+{
+	struct usb_composite_dev	*cdev = get_gadget_data(gadget);
+	unsigned long			flags;
+
+	/* REVISIT:  should we have config and device level
+	 * disconnect callbacks?
+	 */
+	spin_lock_irqsave(&cdev->lock, flags);
+	if (cdev->config)
+		reset_config(cdev);
+	if (cdev->delayed_status != 0) {
+		WARN(cdev, "%s: delayed_status is not 0 in disconnect status\n", __func__);
+		cdev->delayed_status = 0;
+	}
+	spin_unlock_irqrestore(&cdev->lock, flags);
+}
+#endif
+
 /*-------------------------------------------------------------------------*/
 
 static ssize_t composite_show_suspended(struct device *dev,
@@ -1279,6 +1299,9 @@ static struct usb_gadget_driver composite_driver = {
 
 	.setup		= composite_setup,
 	.disconnect	= composite_disconnect,
+#ifdef CONFIG_HTC_DEVICE
+	.mute_disconnect = composite_mute_disconnect,
+#endif
 
 	.suspend	= composite_suspend,
 	.resume		= composite_resume,
