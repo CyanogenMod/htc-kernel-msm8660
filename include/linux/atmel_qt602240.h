@@ -54,12 +54,16 @@
 #define SPT_GATE_T30                              30u
 #define TOUCH_KEYSET_T31                          31u
 #define TOUCH_XSLIDERSET_T32                      32u
+#define SPT_PROTOTYPE_T35                         35u /* 224E, fw 1.1.01 */
 #define DIAGNOSTIC_T37                            37u
 #define PROCI_GRIPSUPPRESSION_T40                 40u /* 224E */
 #define PROCI_TOUCHSUPPRESSION_T42                42u /* 224E */
+#define SPT_MESSAGECOUNT_T44                      44u /* 224E */
 #define SPT_CTECONFIG_T46                         46u /* 224E */
 #define PROCI_STYLUS_T47                          47u /* 224E */
 #define PROCG_NOISESUPPRESSION_T48                48u /* 224E */
+#define PROCI_ADAPTIVETHRESHOLD_T55               55u /* 224E, FW v1.1 */
+#define EXTRA_NOISE_SUPPRESSION_T58		  58u /* 224E, FW v1.1.AA */
 
 #define T37_PAGE_SIZE                           128
 
@@ -147,6 +151,9 @@
 #define T9_CFG_YEDGEDIST                        29
 #define T9_CFG_JUMPLIMIT                        30
 #define T9_CFG_TCHHYST                          31 /* FW v2.x */
+#define T9_CFG_XPITCH				32 /* 224E */
+#define T9_CFG_YPITCH				33
+#define T9_CFG_NEXTTCHDI			34
 
 #define T9_MSG_STATUS                           1
 #define T9_MSG_XPOSMSB                          2
@@ -292,12 +299,30 @@
 #define T48_CFG_MFINCADCSPXTHR                  23 /* two bytes */
 #define T48_CFG_MFERRORTHR                      25 /* two bytes */
 #define T48_CFG_SELFREQMAX                      27
+#define T48_CFG_NOCALCFG                        28 /* FW v1.1 */
 /* Reserved */
 #define T48_CFG_T9SETTINGS                      34
 
 #define T48_MSG_STATUS                          1
 #define T48_MSG_ADCSPERX                        2
 #define T48_MSG_FREQ                            3
+#define T48_MSG_STATE                           4
+#define T48_MSG_NOISE_LV                        5
+#define T48_MSG_NLTHR				6
+
+#define T48_MSG_STATUS_FREQCHG                  BIT(0)
+#define T48_MSG_STATUS_APXCHG                   BIT(1)
+#define T48_MSG_STATUS_ALGOERR                  BIT(2)
+#define T48_MSG_STATUS_STATCHG                  BIT(4)
+#define T48_MSG_STATUS_NLVLCGH			BIT(5)
+
+#define T48_MSG_STATE_OFF                       0
+#define T48_MSG_STATE_SEARCH                    1
+#define T48_MSG_STATE_GC                        2
+#define T48_MSG_STATE_GC_ERR                    3
+#define T48_MSG_STATE_MF                        4
+#define T48_MSG_STATE_MF_ERR                    5
+#define T48_MSG_STATE_NORMAL                    6
 
 #define T46_CFG_CTRL                            0
 #define T46_CFG_MODE                            1
@@ -313,14 +338,38 @@
 
 #define T46_MSG_STATUS                          1
 
+/* 224E 1.1.0.1 */
+#define T35_CFG_MAXTCHTHR			0
+#define T35_CFG_MAXNLTHR			1
+#define T35_CFG_MAXDI				2
+#define T35_CFG_MAXFILTER			3
+#define T35_CFG_THRCHTHR			4
+
+/* 224E 1.1.AA */
+#define T58_CFG_INCTCHTHR			0
+#define T58_CFG_MAXNLTHR			1
+#define T58_CFG_MAXDI				2
+#define T58_CFG_MAXFILTER			3
+#define T58_CFG_THRCHTHR			4
+
 /* cable_config[] of atmel_i2c_platform_data */
 /* config[] of atmel_config_data */
 #define CB_TCHTHR                               0
 #define CB_NOISETHR                             1
 #define CB_IDLEGCAFDEPTH                        2
 #define CB_ACTVGCAFDEPTH                        3
+#define CB_NLTHR				1 /* 224E */
 #define CB_IDLESYNCSPERX                        2 /* 224E */
 #define CB_ACTVSYNCSPERX                        3 /* 224E */
+#define CB_SELFREQMAX				4 /* 224E */
+#define CB_BASEFREQ				5
+#define CB_TCHDI				6 /* 224E */
+#define CB_NEXTTCHDI				7 /* 224E */
+#define CB_INCTCHTHR				8 /* 224E 1.1.AA*/
+#define CB_MAXNLTHR				9
+#define CB_MINTCHDI				10
+#define CB_MINMOVFILTER				11
+#define CB_TCHTHRCHGTHR				12
 
 #define WLC_IDLEACQINT                          0
 #define WLC_ACTVACQINT                          1
@@ -339,6 +388,9 @@
 #define FL_XLOGRIPMAX                           1
 #define FL_XHIGRIPMIN                           2
 #define FL_XHIGRIPMAX                           3
+
+/* workaround */
+#define TW_SHIFT				1
 
 struct info_id_t {
 	uint8_t family_id;
@@ -375,6 +427,7 @@ struct atmel_finger_data {
 struct atmel_i2c_platform_data {
 	uint16_t version;
 	uint16_t source;
+	uint16_t build;
 	uint16_t abs_x_min;
 	uint16_t abs_x_max;
 	uint16_t abs_y_min;
@@ -384,7 +437,9 @@ struct atmel_i2c_platform_data {
 	uint8_t abs_width_min;
 	uint8_t abs_width_max;
 	int gpio_irq;
+	int gpio_rst;
 	int (*power)(int on);
+	uint8_t unlock_attr;
 	int8_t config_T6[6];
 	int8_t config_T7[3];
 	int8_t config_T8[10];
@@ -399,13 +454,16 @@ struct atmel_i2c_platform_data {
 	int8_t config_T25[14];
 	int8_t config_T27[7];
 	int8_t config_T28[6];
+	int8_t config_T35[11];
 	int8_t config_T40[5];
 	int8_t config_T42[8];
 	int8_t config_T46[9];
 	int8_t config_T47[10];
 	int8_t config_T48[54];
+	int8_t config_T55[4];
+	int8_t config_T58[11];
 	uint8_t object_crc[3];
-	int8_t cable_config[4];
+	int8_t cable_config[6];
 	int8_t cable_config_T7[3];
 	int8_t cable_config_T8[10];
 	int8_t cable_config_T9[35];
@@ -414,22 +472,29 @@ struct atmel_i2c_platform_data {
 	int8_t wlc_config[7];
 	uint8_t wlc_freq[5];
 	int8_t noise_config[3];
-	uint8_t cal_tchthr[2];
+	uint8_t call_tchthr[2];
+	uint8_t locking_config[1];
 	uint16_t filter_level[4];
 	uint8_t GCAF_level[5];
+	uint8_t mferr_config[13];
+	uint8_t noiseLine_config[8];
+	uint8_t workaround;
 };
 
 struct atmel_config_data {
-	int8_t config[4];
+	int8_t config[6];
 	int8_t *config_T7;
 	int8_t *config_T8;
 	int8_t *config_T9;
 	int8_t *config_T22;
 	int8_t *config_T28;
+	int8_t *config_T35;
 	int8_t *config_T40;
 	int8_t *config_T42;
 	int8_t *config_T46;
 	int8_t *config_T48;
+	int8_t *config_T55;
+	int8_t *config_T58;
 };
 
 #endif
