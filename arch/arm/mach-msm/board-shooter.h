@@ -276,6 +276,8 @@
 #define SHOOTER_AUD_REMO_EN        PMGPIO(15)
 #define SHOOTER_AUD_REMO_PRES      PMGPIO(37)
 
+#define SW_CAM				0x0e
+
 void __init shooter_init_mmc(void);
 void __init shooter_audio_init(void);
 void __init shooter_init_keypad(void);

@@ -19,7 +19,7 @@
 #include <mach/gpio.h>
 #include "board-shooter.h"
 
-static struct gpio_event_direct_entry shooter_keypad_switch_map[] = {
+static struct gpio_event_direct_entry shooter_keypad_input_map[] = {
 	{ SHOOTER_GPIO_KEY_POWER, 	KEY_POWER		},
 	{ SHOOTER_GPIO_KEY_VOL_UP,	KEY_VOLUMEUP		},
 	{ SHOOTER_GPIO_KEY_VOL_DOWN,	KEY_VOLUMEDOWN		},
@@ -41,7 +41,7 @@ static void shooter_gpio_event_input_init(void)
 				GPIO_CFG_2MA), GPIO_CFG_ENABLE);
 };
 
-static struct gpio_event_input_info shooter_keypad_switch_info = {
+static struct gpio_event_input_info shooter_keypad_input_info = {
 	.info.func = gpio_event_input_func,
 	.info.no_suspend = true,
 	.flags = GPIOEDF_PRINT_KEYS,
@@ -51,11 +51,33 @@ static struct gpio_event_input_info shooter_keypad_switch_info = {
 # else
 	.debounce_time.tv64 = 5 * NSEC_PER_MSEC,
 # endif
+	.keymap = shooter_keypad_input_map,
+	.keymap_size = ARRAY_SIZE(shooter_keypad_input_map)
+};
+
+static struct gpio_event_direct_entry shooter_keypad_switch_map[] = {
+	 { SHOOTER_GPIO_SW_LCM_3D,	SW_CAM			},
+};
+
+static void shooter_gpio_event_switch_init(void)
+{
+	gpio_tlmm_config(GPIO_CFG(SHOOTER_GPIO_SW_LCM_3D, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP,
+				GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+	gpio_tlmm_config(GPIO_CFG(SHOOTER_GPIO_SW_LCM_2D, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP,
+				GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+};
+
+static struct gpio_event_input_info shooter_keypad_switch_info = {
+	.info.func = gpio_event_input_func,
+	.info.no_suspend = false,
+	.flags = GPIOEDF_PRINT_KEYS,
+	.type = EV_SW,
 	.keymap = shooter_keypad_switch_map,
-	.keymap_size = ARRAY_SIZE(shooter_keypad_switch_map)
+	.keymap_size = ARRAY_SIZE(shooter_keypad_switch_map),
 };
 
 static struct gpio_event_info *shooter_keypad_info[] = {
+	&shooter_keypad_input_info.info,
 	&shooter_keypad_switch_info.info,
 };
 
@@ -66,11 +88,14 @@ static int shooter_gpio_keypad_power(
 };
 
 static struct gpio_event_platform_data shooter_keypad_data = {
+	.names = {
 #ifdef CONFIG_MACH_SHOOTER
-	.name = "shooter-keypad",
+		"shooter-keypad",
 #else
-	.name = "shooteru-keypad",
+		"shooteru-keypad",
 #endif
+		NULL,
+	},
 	.info = shooter_keypad_info,
 	.info_count = ARRAY_SIZE(shooter_keypad_info),
 	.power = shooter_gpio_keypad_power,
@@ -91,5 +116,6 @@ static struct platform_device *shooter_input_devices[] __initdata = {
 void __init shooter_init_keypad(void)
 {
 	shooter_gpio_event_input_init();
+	shooter_gpio_event_switch_init();
 	platform_add_devices(shooter_input_devices, ARRAY_SIZE(shooter_input_devices));
 };
