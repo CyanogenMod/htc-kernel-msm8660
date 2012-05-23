@@ -1,6 +1,7 @@
-/* linux/arch/arm/mach-msm/board-shooter-mmc.c
+/* arch/arm/mach-msm/board-shooter-mmc.c
  *
  * Copyright (C) 2008 HTC Corporation.
+ * Copyright (C) 2012 The CyanogenMod Project.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and

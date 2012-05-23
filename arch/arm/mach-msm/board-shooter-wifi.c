@@ -1,5 +1,23 @@
-/* arch/arm/mach-msm/board-shooter-wifi.c */
+/* arch/arm/mach-msm/board-shooter-wifi.c
+ *
+ * Copyright (C) 2010-2011 HTC Corporation.
+ * Copyright (C) 2012 The CyanogenMod Project.
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
 
+#include <linux/android_pmem.h>
+#include <linux/mfd/pmic8058.h>
+#include <linux/mfd/marimba.h>
+#include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>

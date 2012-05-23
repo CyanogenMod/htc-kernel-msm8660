@@ -1,6 +1,7 @@
 /* arch/arm/mach-msm/board-shooter-keypad.c
  *
  * Copyright (C) 2008 Google, Inc.
+ * Copyright (C) 2012 The CyanogenMod Project.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -10,7 +11,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
  */
 
 #include <linux/platform_device.h>
