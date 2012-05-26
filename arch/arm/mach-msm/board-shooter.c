@@ -2124,8 +2124,8 @@ static int pm8058_gpios_init(void)
 				.inv_int_pol	= 0,
 			}
 		},
-		{ /* Timpani Reset */
-			PM8058_GPIO_PM_TO_SYS(20),
+		{ /* Audio Speaker Amplifier */
+			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_SPK_ENO),
 			{
 				.direction	= PM_GPIO_DIR_OUT,
 				.output_value	= 0,
@@ -2133,10 +2133,29 @@ static int pm8058_gpios_init(void)
 				.pull		= PM_GPIO_PULL_NO,
 				.out_strength	= PM_GPIO_STRENGTH_HIGH,
 				.function	= PM_GPIO_FUNC_NORMAL,
+				.vin_sel	= 6,	/* LDO5 2.85 V */
+				.inv_int_pol	= 0,
+			}
+		},
+		{ /* Timpani Reset */
+			PM8058_GPIO_PM_TO_SYS(20),
+			{
+				.direction	= PM_GPIO_DIR_OUT,
+#ifdef CONFIG_MACH_SHOOTER
+				.output_value	= 0,
+				.pull		= PM_GPIO_PULL_NO,
+#else
+				.output_value	= 1,
+				.pull		= PM_GPIO_PULL_DN,
+#endif
+				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
+				.out_strength	= PM_GPIO_STRENGTH_HIGH,
+				.function	= PM_GPIO_FUNC_NORMAL,
 				.vin_sel	= 2,
 				.inv_int_pol	= 0,
 			}
 		},
+#ifdef CONFIG_MACH_SHOOTER
 		{
 			PM8058_GPIO_PM_TO_SYS(SHOOTER_PS_VOUT),
 			{
@@ -2147,6 +2166,7 @@ static int pm8058_gpios_init(void)
 				.inv_int_pol	= 0,
 			},
 		},
+#endif
 		{ /* Green LED */
 			PM8058_GPIO_PM_TO_SYS(SHOOTER_GREEN_LED),
 			{
@@ -2255,7 +2275,7 @@ static int pm8058_gpios_init(void)
 			PM8058_GPIO_PM_TO_SYS(SHOOTER_AUD_REMO_PRES),
 			{
 				.direction	= PM_GPIO_DIR_IN,
-				.pull		= PM_GPIO_PULL_UP_1P5,
+				.pull		= PM_GPIO_PULL_NO,
 				.vin_sel	= PM8058_GPIO_VIN_L5, /* 2.85 V */
 				.function	= PM_GPIO_FUNC_NORMAL,
 				.inv_int_pol	= 0,
