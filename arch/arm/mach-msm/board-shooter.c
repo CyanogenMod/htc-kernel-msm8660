@@ -233,11 +233,6 @@ static struct htc_battery_platform_data htc_battery_pdev_data = {
 	}
 };
 
-static struct platform_device shooter_3Dpanel_device = {
-	.name = "panel_3d",
-	.id = -1,
-};
-
 static struct platform_device htc_battery_pdev = {
 	.name = "htc_battery",
 	.id = -1,
@@ -246,6 +241,11 @@ static struct platform_device htc_battery_pdev = {
 	},
 };
 #endif
+
+static struct platform_device shooter_3Dpanel_device = {
+	.name = "panel_3d",
+	.id = -1,
+};
 
 static unsigned fb_size;
 static int __init fb_size_setup(char *p)
