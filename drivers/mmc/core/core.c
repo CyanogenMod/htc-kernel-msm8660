@@ -218,6 +218,13 @@ mmc_start_request(struct mmc_host *host, struct mmc_request *mrq)
 			host->perf.start = ktime_get();
 #endif
 	}
+
+    // Make sure the host is powered before we ungate the clocks
+    if (mmc_bus_needs_resume(host))
+    {
+        mmc_resume_bus(host);
+    }
+
 	mmc_host_clk_hold(host);
 	led_trigger_event(host->led, LED_FULL);
 	host->ops->request(host, mrq);
@@ -1101,6 +1108,8 @@ void mmc_power_up(struct mmc_host *host)
 
 void mmc_power_off(struct mmc_host *host)
 {
+    printk("%s: Powering off MMC\n", mmc_hostname(host));
+
 	mmc_host_clk_hold(host);
 
 	host->ios.clock = 0;
