@@ -45,11 +45,13 @@
 #define TPS65200_CHECK_INTERVAL (15)
 /* Delay 200ms to set original VDPM for preventing vbus voltage dropped & pass MHL spec */
 #define DELAY_MHL_INIT	msecs_to_jiffies(200)
+#define DELAY_KICK_TPS	msecs_to_jiffies(10)
 #define SET_VDPM_AS_476	1
 
 static struct workqueue_struct *tps65200_wq;
 static struct work_struct chg_stat_work;
 static struct delayed_work set_vdpm_work;
+static struct delayed_work kick_dog;
 
 static struct alarm tps65200_check_alarm;
 static struct work_struct check_alarm_work;
@@ -202,16 +204,29 @@ return :TRUE-->OK
  */
 static int tps65200_i2c_write_byte(u8 value, u8 reg)
 {
-    /* 2 bytes offset 1 contains the data offset 0 is used by i2c_write */
+	/* 2 bytes offset 1 contains the data offset 0 is used by i2c_write */
 	int result;
+	int i;
 	u8 temp_buffer[2] = { 0 };
-    /* offset 1 contains the data */
+	/* offset 1 contains the data */
 	temp_buffer[1] = value;
-	result = tps65200_i2c_write(temp_buffer, reg, 1);
+	/*  There is workaround here to retry when returns fail since of
+	    I2C resume order changed in kernel 3.0
+
+	    Max retry times : 10
+	    Will break when writing byte successfully (return 0)
+	*/
+	for (i = 0; i < 10; i++) {
+		result = tps65200_i2c_write(temp_buffer, reg, 1);
+		if (result == 0)
+			break;
+		pr_tps_err("TPS65200 I2C write retry count = %d, result = %d\n", i+1, result);
+		msleep(10);
+	}
 	if (result != 0)
 		pr_tps_err("TPS65200 I2C write fail = %d\n", result);
 
-    return result;
+	return result;
 }
 
 /**
@@ -226,7 +241,19 @@ return :TRUE-->OK
 static int tps65200_i2c_read_byte(u8 *value, u8 reg)
 {
 	int result = 0;
-	result = tps65200_i2c_read(value, reg, 1);
+	int i;
+	/*  Similar to the case of tps65200_i2c_write_byte
+
+	    Max retry times : 10
+	    Will break when reading byte successfully (return 0)
+	*/
+	for (i = 0; i < 10; i++) {
+		result = tps65200_i2c_read(value, reg, 1);
+		if (result == 0)
+			break;
+		pr_tps_err("TPS65200 I2C read retry count = %d, result = %d\n", i+1, result);
+		msleep(10);
+	}
 	if (result != 0)
 		pr_tps_err("TPS65200 I2C read fail = %d\n", result);
 
@@ -275,6 +302,7 @@ static int tps65200_set_chg_stat(unsigned int ctrl)
 static int tps65200_dump_register(void)
 {
 	u8 regh0 = 0, regh1 = 0, regh2 = 0, regh3 = 0;
+	int result = 0;
 	tps65200_i2c_read_byte(&regh1, 0x01);
 	tps65200_i2c_read_byte(&regh0, 0x00);
 	tps65200_i2c_read_byte(&regh3, 0x03);
@@ -284,11 +312,11 @@ static int tps65200_dump_register(void)
 	tps65200_i2c_read_byte(&regh0, 0x06);
 	tps65200_i2c_read_byte(&regh1, 0x08);
 	tps65200_i2c_read_byte(&regh2, 0x09);
-	tps65200_i2c_read_byte(&regh3, 0x0A);
+	result = tps65200_i2c_read_byte(&regh3, 0x0A);
 	pr_tps_info("regh 0x06=%x, 0x08=%x, regh 0x09=%x, regh 0x0A=%x\n",
 			regh0, regh1, regh2, regh3);
 
-	return 0;
+	return result;
 }
 
 u32 htc_fake_charger_for_testing(u32 ctl)
@@ -312,12 +340,25 @@ static void set_vdpm(struct work_struct *work)
 		tps_set_charger_ctrl(VDPM_ORIGIN_V);
 }
 
+#ifdef CONFIG_MACH_GOLFU
+static void set_golfu_regh(void)
+{
+	u8 regh;
+	tps65200_i2c_write_byte(0x00, 0x0F);
+	tps65200_i2c_read_byte(&regh, 0x03);
+	regh |= 0x20;
+	regh &= 0xBF;
+	tps65200_i2c_write_byte(regh, 0x03);
+}
+#endif
+
 int tps_set_charger_ctrl(u32 ctl)
 {
 	int result = 0;
 	u8 status = 0;
 	u8 regh = 0;
 	u8 regh1 = 0, regh2 = 0, regh3 = 0;
+	int i2c_status = 0;
 
 	if (get_kernel_flag() & KERNEL_FLAG_ENABLE_FAST_CHARGE)
 		ctl = htc_fake_charger_for_testing(ctl);
@@ -336,6 +377,9 @@ int tps_set_charger_ctrl(u32 ctl)
 		cancel_delayed_work_sync(&set_vdpm_work);
 		tps65200_vdpm_chg = 0;
 		tps65200_i2c_write_byte(0x87, 0x03); /* VDPM = 4.76V */
+		#ifdef CONFIG_MACH_GOLFU
+		set_golfu_regh();
+		#endif
 #endif /* SET_VDPM_AS_476 */
 
 		/* cancel CHECK_CHG alarm */
@@ -360,6 +404,9 @@ int tps_set_charger_ctrl(u32 ctl)
 		if (tps65200_low_chg)
 			regh |= 0x08;	/* enable low charge curent */
 		tps65200_i2c_write_byte(regh, 0x03);
+		#ifdef CONFIG_MACH_GOLFU
+		set_golfu_regh();
+		#endif
 		regh = 0x63;
 #ifdef CONFIG_SUPPORT_DQ_BATTERY
 		if (htc_is_dq_pass)
@@ -382,17 +429,12 @@ int tps_set_charger_ctrl(u32 ctl)
 		break;
 	case POWER_SUPPLY_ENABLE_FAST_CHARGE:
 		tps65200_dump_register();
-#if defined(CONFIG_MACH_HOLIDAY)
-/*                tps65200_i2c_write_byte(0x29, 0x01);*/
-		regh = 0x1 | (0x0 << 3);  /* 550mA */
-		tps65200_i2c_write_byte(regh, 0x01);
-#else
 		tps65200_i2c_write_byte(0x29, 0x01);
 		tps65200_i2c_write_byte(0x2A, 0x00);
+
 #if SET_VDPM_AS_476
 		regh = 0x87;
 #else
-#endif
 		/* set DPM regulation voltage to 4.44V */
 		regh = 0x83;
 #ifdef CONFIG_SUPPORT_DQ_BATTERY
@@ -401,21 +443,13 @@ int tps_set_charger_ctrl(u32 ctl)
 			regh = 0x85;
 #endif
 #endif /* SET_VDPM_AS_476 */
+
 		if (tps65200_low_chg)
 			regh |= 0x08;	/* enable low charge current */
 		tps65200_i2c_write_byte(regh, 0x03);
-#if defined(CONFIG_MACH_HOLIDAY)
-		regh = 0x63;
-#ifdef CONFIG_SUPPORT_DQ_BATTERY
-		if (htc_is_dq_pass)
-			regh = 0x6A;
-#endif
-		tps65200_i2c_write_byte(regh, 0x02);
-
-		tps65200_i2c_write_byte(0x2A, 0x00);
-
-		msleep(AC_CURRENT_SWTICH_DELAY_200MS);
-#endif  /* CONFIG_MACH_HOLIDAY */
+		#ifdef CONFIG_MACH_GOLFU
+		set_golfu_regh();
+		#endif
 
 		regh = 0xA3;
 #ifdef CONFIG_SUPPORT_DQ_BATTERY
@@ -424,24 +458,6 @@ int tps_set_charger_ctrl(u32 ctl)
 #endif
 		tps65200_i2c_write_byte(regh, 0x02);
 
-#if defined(CONFIG_MACH_HOLIDAY)
-		msleep(AC_CURRENT_SWTICH_DELAY_200MS);
-		regh = 0x9;	  /* 650mA */
-		tps65200_i2c_write_byte(regh, 0x01);
-
-/*                msleep(AC_CURRENT_SWTICH_DELAY_100MS);*/
-/*                regh = 0x11;	  |+ 750mA +|*/
-/*                tps65200_i2c_write_byte(regh, 0x01);*/
-
-/*                msleep(AC_CURRENT_SWTICH_DELAY_100MS);*/
-/*                regh = 0x19;  |+ 850mA +|*/
-/*                tps65200_i2c_write_byte(regh, 0x01);*/
-
-		msleep(AC_CURRENT_SWTICH_DELAY_100MS);
-		regh = 0x29;  	/* 1050mA */
-		tps65200_i2c_write_byte(regh, 0x01);
-
-#endif  /* CONFIG_MACH_HOLIDAY */
 		tps65200_i2c_read_byte(&regh, 0x01);
 		tps65200_i2c_read_byte(&regh1, 0x00);
 		tps65200_i2c_read_byte(&regh2, 0x03);
@@ -492,6 +508,9 @@ int tps_set_charger_ctrl(u32 ctl)
 		tps65200_i2c_read_byte(&regh, 0x03);
 		regh |= 0x08;
 		tps65200_i2c_write_byte(regh, 0x03);
+		#ifdef CONFIG_MACH_GOLFU
+		set_golfu_regh();
+		#endif
 		tps65200_low_chg = 1;
 		tps65200_i2c_read_byte(&regh, 0x03);
 		pr_tps_info("Switch charger ON (LIMITED): regh 0x03=%x\n", regh);
@@ -500,12 +519,19 @@ int tps_set_charger_ctrl(u32 ctl)
 		tps65200_i2c_read_byte(&regh, 0x03);
 		regh &= 0xF7;
 		tps65200_i2c_write_byte(regh, 0x03);
+		#ifdef CONFIG_MACH_GOLFU
+		set_golfu_regh();
+		#endif
 		tps65200_low_chg = 0;
 		tps65200_i2c_read_byte(&regh, 0x03);
 		pr_tps_info("Switch charger OFF (LIMITED): regh 0x03=%x\n", regh);
 		break;
 	case CHECK_CHG:
-		tps65200_dump_register();
+		i2c_status = tps65200_dump_register();
+		if (i2c_status == -5) {
+			pr_tps_info("Delay 200ms to kick tps watchdog!\n");
+			schedule_delayed_work(&kick_dog, DELAY_KICK_TPS);
+		}
 		break;
 	case SET_ICL500:
 		pr_tps_info("Switch charger SET_ICL500 \n");
@@ -702,6 +728,12 @@ static void chg_stat_work_func(struct work_struct *work)
 	tps65200_i2c_write_byte(0x28, 0x00);
 	return;
 }
+static void kick_tps_watchdog(struct work_struct *work)
+{
+	pr_tps_info("To kick tps watchgod through delay workqueue !\n");
+	tps65200_dump_register();
+	return;
+}
 
 static void tps65200_check_alarm_handler(struct alarm *alarm)
 {
@@ -722,6 +754,7 @@ static int tps65200_probe(struct i2c_client *client,
 	struct tps65200_i2c_client   *data = &tps65200_i2c_module;
 	struct tps65200_platform_data *pdata =
 					client->dev.platform_data;
+	pr_tps_info("%s\n",__func__);
 
 	if (i2c_check_functionality(client->adapter, I2C_FUNC_I2C) == 0) {
 		pr_tps_err("I2C fail\n");
@@ -744,6 +777,9 @@ static int tps65200_probe(struct i2c_client *client,
 	htc_is_dq_pass = pdata->dq_result;
 	if (htc_is_dq_pass)
 		pr_tps_info("HV battery is detected.\n");
+	else
+		pr_tps_info("not HV battery.\n");
+
 #endif
 	/*  For chg_stat interrupt initialization. */
 	chg_stat_int = 0;
@@ -789,6 +825,9 @@ static int tps65200_probe(struct i2c_client *client,
 		}
 	}
 	INIT_DELAYED_WORK(&set_vdpm_work, set_vdpm);
+
+	pr_tps_info("To init delay workqueue to kick tps watchdog!\n");
+	INIT_DELAYED_WORK(&kick_dog, kick_tps_watchdog);
 
 	data->address = client->addr;
 	data->client = client;
