@@ -2669,7 +2669,7 @@ static struct mpu3050_platform_data mpu3050_data = {
 	.level_shifter = 0,
 	.accel = {
 		.get_slave_descr = get_accel_slave_descr,
-		.adapt_num = 5, /* The i2c bus to which the mpu device is connected */
+		.adapt_num = MSM_GSBI10_QUP_I2C_BUS_ID, /* The i2c bus to which the mpu device is connected */
 		.bus = EXT_SLAVE_BUS_SECONDARY,
 		.address = 0x30 >> 1,
 		.orientation = { -1, 0, 0, 0, 1, 0, 0, 0, -1 },
@@ -2677,7 +2677,7 @@ static struct mpu3050_platform_data mpu3050_data = {
 
 	.compass = {
 		.get_slave_descr = get_compass_slave_descr,
-		.adapt_num = 5, /* The i2c bus to which the mpu device is connected */
+		.adapt_num = MSM_GSBI10_QUP_I2C_BUS_ID, /* The i2c bus to which the mpu device is connected */
 		.bus = EXT_SLAVE_BUS_PRIMARY,
 		.address = 0x1A >> 1,
 		.orientation = { -1, 0, 0, 0, 1, 0, 0, 0, -1 },
@@ -2865,9 +2865,6 @@ static void register_i2c_devices(void)
 					msm8x60_i2c_devices[i].len);
 	}
 
-	i2c_register_board_info(MSM_GSBI10_QUP_I2C_BUS_ID,
-		mpu3050_GSBI10_boardinfo, ARRAY_SIZE(mpu3050_GSBI10_boardinfo));
-
 	if (ps_type == 1) {
 		i2c_register_board_info(MSM_GSBI10_QUP_I2C_BUS_ID,
 			i2c_isl29028_devices,
@@ -2878,6 +2875,9 @@ static void register_i2c_devices(void)
 			ARRAY_SIZE(i2c_isl29029_devices));
 	} else
 		printk(KERN_DEBUG "No Intersil chips\n");
+
+	i2c_register_board_info(MSM_GSBI10_QUP_I2C_BUS_ID,
+		mpu3050_GSBI10_boardinfo, ARRAY_SIZE(mpu3050_GSBI10_boardinfo));
 #endif
 }
 
