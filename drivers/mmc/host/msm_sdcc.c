@@ -130,14 +130,6 @@ msmsdcc_print_status(struct msmsdcc_host *host, char *hdr, uint32_t status)
 }
 #endif
 
-static int is_wifi_slot(struct mmc_platform_data *plat)
-{
-	if (plat->slot_type && *plat->slot_type == MMC_TYPE_SDIO_WIFI)
-		return 1;
-
-	return 0;
-}
-
 static void
 msmsdcc_start_command(struct msmsdcc_host *host, struct mmc_command *cmd,
 		      u32 c);
@@ -5005,14 +4997,7 @@ msmsdcc_runtime_resume(struct device *dev)
 			mmc_host_clk_release(mmc);
 		}
 
-#ifdef CONFIG_WIMAX
-		/*Disable resume function for wifi slot & wimax */
-		if (!is_wifi_slot(host->plat) && mmc->card && !host->eject && !is_wimax_platform(host->plat))
-#else
-		/*Disable resume function for wifi slot */
-		if (!is_wifi_slot(host->plat) && mmc->card && !host->eject)
-#endif
-			mmc_resume_host(mmc);
+		mmc_resume_host(mmc);
 
 		/*
 		 * FIXME: Clearing of flags must be handled in clients
