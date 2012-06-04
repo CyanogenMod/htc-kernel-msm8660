@@ -219,11 +219,7 @@ static struct platform_device msm_rpm_log_device = {
 static struct htc_battery_platform_data htc_battery_pdev_data = {
 	.guage_driver = GUAGE_NONE,
 	.gpio_mbat_in = MSM_GPIO_TO_INT(SHOOTER_GPIO_MBAT_IN),
-#ifdef CONFIG_MACH_SHOOTER
 	.gpio_mbat_in_trigger_level = MBAT_IN_HIGH_TRIGGER,
-#else
-	.gpio_mbat_in_trigger_level = MBAT_IN_LOW_TRIGGER,
-#endif
 	.charger = SWITCH_CHARGER_TPS65200,
 	.mpp_data = {
 		{PM8058_MPP_PM_TO_SYS(XOADC_MPP_3), PM8XXX_MPP_AIN_AMUX_CH6},
@@ -759,6 +755,7 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 #ifdef CONFIG_BATTERY_MSM8X60
 	.chg_vbus_draw		= msm_charger_vbus_draw,
 #endif
+	.drv_ampl		= HS_DRV_AMPLITUDE_DEFAULT,
 };
 #endif
 
