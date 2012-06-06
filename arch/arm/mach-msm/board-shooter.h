@@ -31,37 +31,21 @@
 #define MSM_RAM_CONSOLE_BASE		0x40300000
 #define MSM_RAM_CONSOLE_SIZE		SZ_1M
 
-#ifdef CONFIG_FB_MSM_LCDC_DSUB
-/* VGA = 1440 x 900 x 4(bpp) x 2(pages)
-   prim = 1024 x 600 x 4(bpp) x 2(pages)
-   This is the difference. */
-#define MSM_FB_DSUB_PMEM_ADDER (0xA32000-0x4B0000)
-#else
-#define MSM_FB_DSUB_PMEM_ADDER (0)
-#endif
-
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
-#define MSM_FB_PRIM_BUF_SIZE (roundup((960 * 540 * 4), 4096) * 3) /* 4 bpp x 3 pages */
+#define MSM_FB_PRIM_BUF_SIZE (roundup((960 * ALIGN(540, 32) * 4), 4096) * 3) /* 4 bpp x 3 pages */
 #else
-#define MSM_FB_PRIM_BUF_SIZE (roundup((960 * 540 * 4), 4096) * 2) /* 4 bpp x 2 pages */
+#define MSM_FB_PRIM_BUF_SIZE (roundup((960 * ALIGN(540, 32) * 4), 4096) * 2) /* 4 bpp x 2 pages */
 #endif
 
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
-#define MSM_FB_EXT_BUF_SIZE (roundup((1920 * 1080 * 2), 4096) * 1) /* 2 bpp x 1 page */
+#define MSM_FB_EXT_BUF_SIZE (roundup((1920 * ALIGN(1080, 32) * 2), 4096) * 1) /* 2 bpp x 1 page */
 #elif defined(CONFIG_FB_MSM_TVOUT)
 #define MSM_FB_EXT_BUF_SIZE (roundup((720 * 576 * 2), 4096) * 2) /* 2 bpp x 2 pages */
 #else
 #define MSM_FB_EXT_BUF_SIZE 0
 #endif
 
-#ifdef CONFIG_FB_MSM_HDMI_AS_PRIMARY
-/* 4 bpp x 2 page HDMI case */
-#define MSM_FB_SIZE roundup((1920 * 1088 * 4 * 2), 4096)
-#else
-/* Note: must be multiple of 4096 */
-#define MSM_FB_SIZE roundup(MSM_FB_PRIM_BUF_SIZE + MSM_FB_EXT_BUF_SIZE + \
-				MSM_FB_DSUB_PMEM_ADDER, 4096)
-#endif
+#define MSM_FB_SIZE (MSM_FB_PRIM_BUF_SIZE + MSM_FB_EXT_BUF_SIZE)
 
 #ifdef CONFIG_FB_MSM_HDMI_AS_PRIMARY
 #define MSM_PMEM_SF_SIZE 0x8000000 /* 128 Mbytes */
@@ -76,7 +60,7 @@
 #endif  /* CONFIG_FB_MSM_OVERLAY0_WRITEBACK */
 
 #ifdef CONFIG_FB_MSM_OVERLAY1_WRITEBACK
-#define MSM_FB_OVERLAY1_WRITEBACK_SIZE roundup((1920 * 1088 * 3 * 2), 4096)
+#define MSM_FB_OVERLAY1_WRITEBACK_SIZE roundup((1920 * ALIGN(1080, 32) * 3 * 2), 4096)
 #else
 #define MSM_FB_OVERLAY1_WRITEBACK_SIZE (0)
 #endif  /* CONFIG_FB_MSM_OVERLAY1_WRITEBACK */
