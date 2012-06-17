@@ -96,6 +96,10 @@
 static struct platform_device ion_dev;
 #endif
 
+unsigned engineerid, mem_size_mb;
+
+void sysinfo_proc_init(void);
+
 struct pm8xxx_mpp_init_info {
 	unsigned			mpp;
 	struct pm8xxx_mpp_config_data	config;
@@ -4355,15 +4359,17 @@ static void __init msm8x60_init(void)
 		pr_err("failed to create board_properties\n");
 
 #ifdef CONFIG_MSM8X60_AUDIO
-        spi_register_board_info(msm_spi_board_info, ARRAY_SIZE(msm_spi_board_info));
-        gpio_tlmm_config(msm_spi_gpio[0], GPIO_CFG_DISABLE);
-        gpio_tlmm_config(msm_spi_gpio[1], GPIO_CFG_DISABLE);
-        gpio_tlmm_config(msm_spi_gpio[2], GPIO_CFG_DISABLE);
-        gpio_tlmm_config(msm_spi_gpio[3], GPIO_CFG_DISABLE);
-        msm_auxpcm_init();
-        msm_snddev_init();
-        shooter_audio_init();
+	spi_register_board_info(msm_spi_board_info, ARRAY_SIZE(msm_spi_board_info));
+	gpio_tlmm_config(msm_spi_gpio[0], GPIO_CFG_DISABLE);
+	gpio_tlmm_config(msm_spi_gpio[1], GPIO_CFG_DISABLE);
+	gpio_tlmm_config(msm_spi_gpio[2], GPIO_CFG_DISABLE);
+	gpio_tlmm_config(msm_spi_gpio[3], GPIO_CFG_DISABLE);
+	msm_auxpcm_init();
+	msm_snddev_init();
+	shooter_audio_init();
 #endif
+
+	sysinfo_proc_init();
 }
 
 static void __init msm8x60_init_early(void)

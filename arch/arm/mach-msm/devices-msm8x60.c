@@ -22,6 +22,9 @@
 #include <asm/clkdev.h>
 #include <linux/msm_kgsl.h>
 #include <linux/msm_rotator.h>
+#ifdef CONFIG_HTC_DEVICE
+#include <linux/spi/flash.h>
+#endif
 #include <mach/msm_hsusb.h>
 #include "footswitch.h"
 #include "clock.h"
@@ -2649,6 +2652,13 @@ struct platform_device asoc_mvs_dai0 = {
 struct platform_device asoc_mvs_dai1 = {
 	.name   = "mvs-cpu-dai",
 	.id     = 0,
+};
+#endif
+
+#ifdef CONFIG_HTC_DEVICE
+struct flash_platform_data msm_nand_data = {
+	.parts		= NULL,
+	.nr_parts	= 0,
 };
 #endif
 
